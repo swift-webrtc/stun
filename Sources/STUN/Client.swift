@@ -20,7 +20,7 @@ public final class STUNClient {
       throw STUNError.invalidServer
     }
 
-    let socket = try UDPSocket.connect(to: SocketAddress(ip: host, port: port ?? .turn))
+    let socket = try UDPSocket.connect(to: SocketAddress(ip: host, port: port ?? .stun))
     return STUNClient(socket: socket, configuration: configuration)
   }
 
