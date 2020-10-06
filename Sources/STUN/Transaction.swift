@@ -14,7 +14,7 @@ internal final class STUNTransaction {
   internal var raw: Array<UInt8>
   internal var handler: STUNClient.RequestHandler?
   internal var rto: Duration
-  internal var attempt: Int = 0
+  internal var attemptCount: Int = 0
   internal var timeoutTask: DispatchWorkItem
 
   internal init(
@@ -34,7 +34,7 @@ internal final class STUNTransaction {
   }
 
   internal func start(on queue: DispatchQueue) {
-    queue.asyncAfter(deadline: .now() + .nanoseconds((attempt + 1) * rto.nanoseconds), execute: timeoutTask)
+    queue.asyncAfter(deadline: .now() + .milliseconds(min(rto.milliseconds << attemptCount, 8000)), execute: timeoutTask)
   }
 }
 
@@ -42,7 +42,7 @@ internal final class STUNTransaction {
 
 extension STUNTransaction: Equatable {
 
-  internal static func ==(lhs: STUNTransaction, rhs: STUNTransaction) -> Bool {
+  internal static func == (lhs: STUNTransaction, rhs: STUNTransaction) -> Bool {
     lhs.id == rhs.id
   }
 }
