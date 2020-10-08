@@ -12,7 +12,7 @@ import Dispatch
 internal final class STUNTransaction {
   internal var id: STUNTransactionId
   internal var raw: Array<UInt8>
-  internal var handler: STUNClient.RequestHandler?
+  internal var handler: STUNRequestHandler?
   internal var rto: Duration
   internal var attemptCount: Int = 0
   internal var timeoutTask: DispatchWorkItem
@@ -20,7 +20,7 @@ internal final class STUNTransaction {
   internal init(
     id: STUNTransactionId,
     raw: Array<UInt8>,
-    handler: STUNClient.RequestHandler?,
+    handler: STUNRequestHandler?,
     rto: Duration,
     timeoutHandler: @escaping (STUNTransactionId) -> Void
   ) {

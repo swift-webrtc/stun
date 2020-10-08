@@ -10,10 +10,11 @@ import Network
 import Core
 import Dispatch
 
+public typealias STUNRequestHandler = (Result<STUNMessage, Error>) -> Void
+public typealias STUNIndicationHandler = (STUNMessage) -> Void
+
 /// [RFC5389#section-7.2.1](https://tools.ietf.org/html/rfc5389#section-7.2.1)
 public final class STUNClient {
-  public typealias RequestHandler = (Result<STUNMessage, Error>) -> Void
-  public typealias IndicationHandler = (STUNMessage) -> Void
 
   public static func connect(to server: String, configuration: Configuration) throws -> STUNClient {
     guard let (scheme, host, port) = parseURI(server), scheme == "stun" else {
@@ -39,7 +40,7 @@ public final class STUNClient {
     self.thread.start()
   }
 
-  public func send(_ message: STUNMessage, completion: RequestHandler? = nil) {
+  public func send(_ message: STUNMessage, completion: STUNRequestHandler? = nil) {
     queue.async { [self] in
       if message.type.isIndication {
         do {
@@ -91,8 +92,8 @@ public final class STUNClient {
       return
     }
 
-    transaction.attempt += 1
-    guard transaction.attempt <= configuration.maximumAttemptCount else {
+    transaction.attemptCount += 1
+    guard transaction.attemptCount <= configuration.maxAttemptCount else {
       transaction.timeoutTask.cancel()
       transaction.handler?(.failure(STUNError.timeout))
       transactions[transaction.id] = nil
@@ -154,12 +155,17 @@ extension STUNClient {
 
 extension STUNClient {
   public struct Configuration {
+    // RFC 5389 says SHOULD be 500ms.
+    // For years, this was 100ms, but for networks that
+    // experience moments of high RTT (such as 2G networks), this doesn't
+    // work well.
     public var rto: Duration
-    public var indicationHandler: IndicationHandler?
+    public var indicationHandler: STUNIndicationHandler?
+    // The timeout doubles each retransmission, up to this many times
+    // RFC 5389 says SHOULD retransmit 7 times.
+    internal var maxAttemptCount = 7
 
-    internal var maximumAttemptCount = 7
-
-    public init(rto: Duration = .milliseconds(300), indicationHandler: IndicationHandler?) {
+    public init(rto: Duration = .milliseconds(250), indicationHandler: STUNIndicationHandler? = nil) {
       self.rto = rto
       self.indicationHandler = indicationHandler
     }
