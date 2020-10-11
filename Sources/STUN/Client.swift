@@ -44,8 +44,8 @@ public final class STUNClient {
     queue.async { [self] in
       if message.type.isIndication {
         do {
-          try message.withUnsafeBytes(socket.send(_:))
           logger.trace("Send indication: \(message.type)")
+          try message.withUnsafeBytes(socket.send(_:))
         } catch {
           logger.trace("Failed to send indication: \(message.type)")
         }
@@ -60,12 +60,12 @@ public final class STUNClient {
         timeoutHandler: didTimeout(_:)
       )
       do {
+        logger.trace("Send request: \(message.type) - \(message.transactionId)")
         try strat(transaction)
         transactions[message.transactionId] = transaction
-        logger.trace("Send request: \(message.type) - \(message.transactionId)")
       } catch {
-        transaction.handler?(.failure(error))
         logger.trace("Failed to send request: \(message.type) - \(message.transactionId) - \(error)")
+        transaction.handler?(.failure(error))
       }
     }
   }
@@ -94,21 +94,21 @@ public final class STUNClient {
 
     transaction.attemptCount += 1
     guard transaction.attemptCount <= configuration.maxAttemptCount else {
+      logger.trace("Request timeout: \(transactionId)")
       transaction.timeoutTask.cancel()
       transaction.handler?(.failure(STUNError.timeout))
       transactions[transaction.id] = nil
-      logger.trace("Request timeout: \(transactionId)")
       return
     }
 
     do {
-      try strat(transaction)
       logger.info("Resend request: \(transactionId)")
+      try strat(transaction)
     } catch {
+      logger.trace("Failed to resend request: \(transactionId)")
       transaction.timeoutTask.cancel()
       transaction.handler?(.failure(error))
       transactions[transaction.id] = nil
-      logger.trace("Failed to resend request: \(transactionId)")
     }
   }
 }
@@ -117,13 +117,13 @@ extension STUNClient {
 
   internal func didReceiveMessage(_ message: STUNMessage) {
     if let transaction = transactions[message.transactionId] {
+      logger.trace("Receive response: \(message.type) - \(message.transactionId)")
       transaction.timeoutTask.cancel()
       transaction.handler?(.success(message))
       transactions[message.transactionId] = nil
-      logger.trace("Receive response: \(message.type) - \(message.transactionId)")
     } else {
-      configuration.indicationHandler?(message)
       logger.trace("Receive indication: \(message.type)")
+      configuration.indicationHandler?(message)
     }
   }
 
