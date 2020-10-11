@@ -149,16 +149,14 @@ extension STUNMessage {
       guard let rawType = reader.readInteger(as: UInt16.self), let length = reader.readInteger(as: UInt16.self) else {
         throw STUNError.invalidAttributeHeader
       }
-      guard let type = STUNAttribute.Kind(rawValue: rawType) else {
-        throw STUNError.unsupportedAttributeType
-      }
       guard reader.count >= length else {
         throw STUNError.invalidAttributeValue
       }
 
+      let type = STUNAttribute.Kind(rawValue: rawType)
       let value: STUNAttribute.Value
       switch type {
-      case .mappedAddress, .alternateServer:
+      case .mappedAddress, .responseAddress, .sourceAddress, .changedAddress, .alternateServer:
         value = .address(try .init(bytes: reader.readBytes(count: Int(length))!))
       case .xorMappedAddress, .xorPeerAddress, .xorRelayedAddress:
         value = .xorAddress(try .init(bytes: reader.readBytes(count: Int(length))!, transactionId: .init(raw: transactionId)))

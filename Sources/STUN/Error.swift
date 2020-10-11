@@ -14,7 +14,6 @@ public enum STUNError: Error {
   case invalidMagicCookiee
   case invalidMessageBody
   case invalidAttributeHeader
-  case unsupportedAttributeType
   case invalidAttributeValue
   case invalidAddressValue
   case invalidErrorCodeValue

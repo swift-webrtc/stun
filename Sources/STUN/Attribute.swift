@@ -62,69 +62,87 @@ extension STUNAttribute {
 // MARK: - STUNAttribute.Kind
 
 extension STUNAttribute {
-  public enum Kind: UInt16 {
-    /// [RFC5389#section-15.1](https://tools.ietf.org/html/rfc5389#section-15.1)
-    case mappedAddress = 0x0001
-    /// [RFC5389#section-15.3](https://tools.ietf.org/html/rfc5389#section-15.3)
-    case username = 0x0006
-    /// [RFC5389#section-15.4](https://tools.ietf.org/html/rfc5389#section-15.4)
-    case messageIntegrity = 0x0008
-    /// [RFC5389#section-15.6](https://tools.ietf.org/html/rfc5389#section-15.6)
-    case errorCode = 0x0009
-    /// [RFC5389#section-15.9](https://tools.ietf.org/html/rfc5389#section-15.9)
-    case unknownAttributes = 0x000A
-    /// [RFC5389#section-15.7](https://tools.ietf.org/html/rfc5389#section-15.7)
-    case realm = 0x0014
-    /// [RFC5389#section-15.8](https://tools.ietf.org/html/rfc5389#section-15.8)
-    case nonce = 0x0015
-    /// [RFC5389#section-15.2](https://tools.ietf.org/html/rfc5389#section-15.2)
-    case xorMappedAddress = 0x0020
-    /// [RFC5389#section-15.10](https://tools.ietf.org/html/rfc5389#section-15.10)
-    case software = 0x8022
-    /// [RFC5389#section-15.11](https://tools.ietf.org/html/rfc5389#section-15.11)
-    case alternateServer = 0x8023
-    /// [RFC5389#section-15.5](https://tools.ietf.org/html/rfc5389#section-15.5)
-    case fingerprint = 0x8028
-    /// [RFC5245#section-7.1.2.1](https://tools.ietf.org/html/rfc5245#section-7.1.2.1)
-    case priority = 0x0024
-    case useCandidate = 0x0025
-    /// [RFC5245#section-7.1.2.2](https://tools.ietf.org/html/rfc5245#section-7.1.2.2)
-    case iceControlled = 0x8029
-    case iceControlling = 0x802A
-    /// [RFC5766#section-14.1](https://tools.ietf.org/html/rfc5766#section-14.1)
-    case channelNumber = 0x000C
-    /// [RFC5766#section-14.2](https://tools.ietf.org/html/rfc5766#section-14.2)
-    case lifetime = 0x000D
-    /// [RFC5766#section-14.3](https://tools.ietf.org/html/rfc5766#section-14.3)
-    case xorPeerAddress = 0x0012
-    /// [RFC5766#section-14.4](https://tools.ietf.org/html/rfc5766#section-14.4)
-    case data = 0x0013
-    /// [RFC5766#section-14.5](https://tools.ietf.org/html/rfc5766#section-14.5)
-    case xorRelayedAddress = 0x0016
-    /// [RFC5766#section-14.6](https://tools.ietf.org/html/rfc5766#section-14.6)
-    case evenPort = 0x0018
-    /// [RFC5766#section-14.7](https://tools.ietf.org/html/rfc5766#section-14.7)
-    case requestedTransport = 0x0019
-    /// [RFC5766#section-14.8](https://tools.ietf.org/html/rfc5766#section-14.8)
-    case dontFragment = 0x001A
-    /// [RFC5766#section-14.9](https://tools.ietf.org/html/rfc5766#section-14.9)
-    case reservationToken = 0x0022
-    /// [RFC5780#section-7.2](https://tools.ietf.org/html/rfc5780#section-7.2)
-    case changeRequest = 0x0003
-    /// [RFC5780#section-7.5](https://tools.ietf.org/html/rfc5780#section-7.5)
-    case responsePort = 0x0027
-    /// [RFC5780#section-7.6](https://tools.ietf.org/html/rfc5780#section-7.6)
-    case padding = 0x0026
-    case cacheTimeout = 0x8027
-    /// [RFC5780#section-7.3](https://tools.ietf.org/html/rfc5780#section-7.3)
-    case responseOrigin = 0x802b
-    /// [RFC5780#section-7.4](https://tools.ietf.org/html/rfc5780#section-7.4)
-    case otherAddress = 0x802c
-    /// [RFC6062#section-6.2.1](https://tools.ietf.org/html/rfc6062#section-6.2.1)
-    case connectionId = 0x002a
-    /// [RFC6156#section-4.1.1](https://tools.ietf.org/html/rfc6156#section-4.1.1)
-    case requestedAddressFamily = 0x0017
+  public struct Kind: RawRepresentable, Equatable {
+    public var rawValue: UInt16
+
+    public init(rawValue: UInt16) {
+      self.rawValue = rawValue
+    }
   }
+}
+
+// MARK: - Comprehension-required
+
+extension STUNAttribute.Kind {
+  /// [RFC5389#section-15.1](https://tools.ietf.org/html/rfc5389#section-15.1)
+  public static let mappedAddress = Self(rawValue: 0x0001)
+  public static let responseAddress = Self(rawValue: 0x0002)
+  /// [RFC5780#section-7.2](https://tools.ietf.org/html/rfc5780#section-7.2)
+  public static let changeRequest = Self(rawValue: 0x0003)
+  public static let sourceAddress = Self(rawValue: 0x0004)
+  public static let changedAddress = Self(rawValue: 0x0005)
+  /// [RFC5389#section-15.3](https://tools.ietf.org/html/rfc5389#section-15.3)
+  public static let username = Self(rawValue: 0x0006)
+  /// [RFC5389#section-15.4](https://tools.ietf.org/html/rfc5389#section-15.4)
+  public static let messageIntegrity = Self(rawValue: 0x0008)
+  /// [RFC5389#section-15.6](https://tools.ietf.org/html/rfc5389#section-15.6)
+  public static let errorCode = Self(rawValue: 0x0009)
+  /// [RFC5389#section-15.9](https://tools.ietf.org/html/rfc5389#section-15.9)
+  public static let unknownAttributes = Self(rawValue: 0x000A)
+  /// [RFC5766#section-14.1](https://tools.ietf.org/html/rfc5766#section-14.1)
+  public static let channelNumber = Self(rawValue: 0x000C)
+  /// [RFC5766#section-14.2](https://tools.ietf.org/html/rfc5766#section-14.2)
+  public static let lifetime = Self(rawValue: 0x000D)
+  /// [RFC5766#section-14.3](https://tools.ietf.org/html/rfc5766#section-14.3)
+  public static let xorPeerAddress = Self(rawValue: 0x0012)
+  /// [RFC5766#section-14.4](https://tools.ietf.org/html/rfc5766#section-14.4)
+  public static let data = Self(rawValue: 0x0013)
+  /// [RFC5389#section-15.7](https://tools.ietf.org/html/rfc5389#section-15.7)
+  public static let realm = Self(rawValue: 0x0014)
+  /// [RFC5389#section-15.8](https://tools.ietf.org/html/rfc5389#section-15.8)
+  public static let nonce = Self(rawValue: 0x0015)
+  /// [RFC5766#section-14.5](https://tools.ietf.org/html/rfc5766#section-14.5)
+  public static let xorRelayedAddress = Self(rawValue: 0x0016)
+  /// [RFC6156#section-4.1.1](https://tools.ietf.org/html/rfc6156#section-4.1.1)
+  public static let requestedAddressFamily = Self(rawValue: 0x0017)
+  /// [RFC5766#section-14.6](https://tools.ietf.org/html/rfc5766#section-14.6)
+  public static let evenPort = Self(rawValue: 0x0018)
+  /// [RFC5766#section-14.7](https://tools.ietf.org/html/rfc5766#section-14.7)
+  public static let requestedTransport = Self(rawValue: 0x0019)
+  /// [RFC5766#section-14.8](https://tools.ietf.org/html/rfc5766#section-14.8)
+  public static let dontFragment = Self(rawValue: 0x001A)
+  /// [RFC5389#section-15.2](https://tools.ietf.org/html/rfc5389#section-15.2)
+  public static let xorMappedAddress = Self(rawValue: 0x0020)
+  /// [RFC5766#section-14.9](https://tools.ietf.org/html/rfc5766#section-14.9)
+  public static let reservationToken = Self(rawValue: 0x0022)
+  /// [RFC5245#section-7.1.2.1](https://tools.ietf.org/html/rfc5245#section-7.1.2.1)
+  public static let priority = Self(rawValue: 0x0024)
+  public static let useCandidate = Self(rawValue: 0x0025)
+  /// [RFC5780#section-7.6](https://tools.ietf.org/html/rfc5780#section-7.6)
+  public static let padding = Self(rawValue: 0x0026)
+  /// [RFC5780#section-7.5](https://tools.ietf.org/html/rfc5780#section-7.5)
+  public static let responsePort = Self(rawValue: 0x0027)
+  /// [RFC6062#section-6.2.1](https://tools.ietf.org/html/rfc6062#section-6.2.1)
+  public static let connectionId = Self(rawValue: 0x002A)
+}
+
+// MARK: - Comprehension-optional
+
+extension STUNAttribute.Kind {
+  /// [RFC5389#section-15.10](https://tools.ietf.org/html/rfc5389#section-15.10)
+  public static let software = Self(rawValue: 0x8022)
+  /// [RFC5389#section-15.11](https://tools.ietf.org/html/rfc5389#section-15.11)
+  public static let alternateServer = Self(rawValue: 0x8023)
+  public static let cacheTimeout = Self(rawValue: 0x8027)
+  /// [RFC5389#section-15.5](https://tools.ietf.org/html/rfc5389#section-15.5)
+  public static let fingerprint = Self(rawValue: 0x8028)
+  /// [RFC5245#section-7.1.2.2](https://tools.ietf.org/html/rfc5245#section-7.1.2.2)
+  public static let iceControlled = Self(rawValue: 0x8029)
+  public static let iceControlling = Self(rawValue: 0x802A)
+  /// [RFC5780#section-7.3](https://tools.ietf.org/html/rfc5780#section-7.3)
+  public static let responseOrigin = Self(rawValue: 0x802B)
+  /// [RFC5780#section-7.4](https://tools.ietf.org/html/rfc5780#section-7.4)
+  public static let otherAddress = Self(rawValue: 0x802C)
 }
 
 // MARK: - STUNAttribute.Kind + CustomStringConvertible
@@ -134,6 +152,14 @@ extension STUNAttribute.Kind: CustomStringConvertible {
     switch self {
     case .mappedAddress:
       return "MAPPED-ADDRESS"
+    case .responseAddress:
+      return "RESPONSE-ADDRESS"
+    case .changeRequest:
+      return "CHANGE-REQUEST"
+    case .sourceAddress:
+      return "SOURCE-ADDRESS"
+    case .changedAddress:
+      return "CHANGED-ADDRESS"
     case .username:
       return "USERNAME"
     case .messageIntegrity:
@@ -142,26 +168,6 @@ extension STUNAttribute.Kind: CustomStringConvertible {
       return "ERROR-CODE"
     case .unknownAttributes:
       return "UNKNOWN-ATTRIBUTES"
-    case .realm:
-      return "REALM"
-    case .nonce:
-      return "NONCE"
-    case .xorMappedAddress:
-      return "XOR-MAPPED-ADDRESS"
-    case .software:
-      return "SOFTWARE"
-    case .alternateServer:
-      return "ALTERNATE-SERVER"
-    case .fingerprint:
-      return "FINGERPRINT"
-    case .priority:
-      return "PRIORITY"
-    case .useCandidate:
-      return "USE-CANDIDATE"
-    case .iceControlled:
-      return "ICE-CONTROLLED"
-    case .iceControlling:
-      return "ICE-CONTROLLING"
     case .channelNumber:
       return "CHANNEL-NUMBER"
     case .lifetime:
@@ -170,32 +176,52 @@ extension STUNAttribute.Kind: CustomStringConvertible {
       return "XOR-PEER-ADDRESS"
     case .data:
       return "DATA"
+    case .realm:
+      return "REALM"
+    case .nonce:
+      return "NONCE"
     case .xorRelayedAddress:
       return "XOR-RELAYED-ADDRESS"
+    case .requestedAddressFamily:
+      return "REQUESTED-ADDRESS-FAMILY"
     case .evenPort:
       return "EVEN-PORT"
     case .requestedTransport:
       return "REQUESTED-TRANSPORT"
     case .dontFragment:
       return "DONT-FRAGMENT"
+    case .xorMappedAddress:
+      return "XOR-MAPPED-ADDRESS"
     case .reservationToken:
       return "RESERVATION-TOKEN"
-    case .changeRequest:
-      return "CHANGE-REQUEST"
-    case .responsePort:
-      return "RESPONSE-PORT"
+    case .priority:
+      return "PRIORITY"
+    case .useCandidate:
+      return "USE-CANDIDATE"
     case .padding:
       return "PADDING"
+    case .responsePort:
+      return "RESPONSE-PORT"
+    case .connectionId:
+      return "CONNECTION-ID"
+    case .software:
+      return "SOFTWARE"
+    case .alternateServer:
+      return "ALTERNATE-SERVER"
     case .cacheTimeout:
       return "CACHE-TIMEOUT"
+    case .fingerprint:
+      return "FINGERPRINT"
+    case .iceControlled:
+      return "ICE-CONTROLLED"
+    case .iceControlling:
+      return "ICE-CONTROLLING"
     case .responseOrigin:
       return "RESPONSE-ORIGIN"
     case .otherAddress:
       return "OTHER-ADDRESS"
-    case .connectionId:
-      return "CONNECTION-ID"
-    case .requestedAddressFamily:
-      return "REQUESTED-ADDRESS-FAMILY"
+    default:
+      return "UNKNOWN: \(rawValue)"
     }
   }
 }
