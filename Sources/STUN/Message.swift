@@ -156,7 +156,7 @@ extension STUNMessage {
       let type = STUNAttribute.Kind(rawValue: rawType)
       let value: STUNAttribute.Value
       switch type {
-      case .mappedAddress, .responseAddress, .sourceAddress, .changedAddress, .alternateServer:
+      case .mappedAddress, .responseAddress, .sourceAddress, .changedAddress, .alternateServer, .responseOrigin, .otherAddress:
         value = .address(try .init(bytes: reader.readBytes(count: Int(length))!))
       case .xorMappedAddress, .xorPeerAddress, .xorRelayedAddress:
         value = .xorAddress(try .init(bytes: reader.readBytes(count: Int(length))!, transactionId: .init(raw: transactionId)))

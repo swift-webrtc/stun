@@ -7,10 +7,12 @@
 //
 
 import STUN
+import Network
 import Core
 import Logging
 import Foundation
 
+// https://www.voip-info.org/stun/
 func main() throws {
   let config = STUNClient.Configuration { message in
     print(message)

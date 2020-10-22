@@ -16,7 +16,11 @@ let package = Package(
       dependencies: [.product(name: "Network", package: "webrtc-network")]
     ),
     .target(
-      name: "STUNExamples",
+      name: "Client",
+      dependencies: ["STUN"]
+    ),
+    .target(
+      name: "Discovery",
       dependencies: ["STUN"]
     ),
     .testTarget(
