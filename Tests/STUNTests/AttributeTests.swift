@@ -16,98 +16,90 @@ final class AttributeTests: XCTestCase {
 
   func testString() throws {
     var message = STUNMessage(type: .bindingRequest)
-    message.append(.init(type: .username, value: .string("webrtc")))
+    message.appendAttribute(type: .username, value: "webrtc")
     try message.withUnsafeBytes {
-      let attribute = try STUNMessage(bytes: Array($0)).attribute(for: .username)
-      XCTAssertEqual(attribute?.value.string, "webrtc")
+      XCTAssertEqual(try STUNMessage(bytes: Array($0)).attributeValue(for: .username), "webrtc")
     }
   }
 
   func testAddressV4() throws {
-    let address = SocketAddress(ip: .v4(.localhost), port: 3578)
+    let address = STUNAddress(ip: .v4(.localhost), port: 3578)
     var message = STUNMessage(type: .bindingResponse)
-    message.append(.init(type: .mappedAddress, value: .address(address)))
+    message.appendAttribute(type: .mappedAddress, value: address)
     try message.withUnsafeBytes {
-      let attribute = try STUNMessage(bytes: Array($0)).attribute(for: .mappedAddress)
-      XCTAssertEqual(attribute?.value.address, address)
+      XCTAssertEqual(try STUNMessage(bytes: Array($0)).attributeValue(for: .mappedAddress, as: STUNAddress.self), address)
     }
   }
 
   func testAddressV6() throws {
-    let address = SocketAddress(ip: .v6(.localhost), port: 3578)
+    let address = STUNAddress(ip: .v6(.localhost), port: 3578)
     var message = STUNMessage(type: .bindingResponse)
-    message.append(.init(type: .mappedAddress, value: .address(address)))
+    message.appendAttribute(type: .mappedAddress, value: address)
     try message.withUnsafeBytes {
-      let attribute = try STUNMessage(bytes: Array($0)).attribute(for: .mappedAddress)
-      XCTAssertEqual(attribute?.value.address, address)
+      XCTAssertEqual(try STUNMessage(bytes: Array($0)).attributeValue(for: .mappedAddress, as: STUNAddress.self), address)
     }
   }
 
   func testXorAddressV4() throws {
-    let address = SocketAddress(ip: .v4(.localhost), port: 3578)
+    let address = STUNAddress(ip: .v4(.localhost), port: 3578)
     var message = STUNMessage(type: .bindingResponse)
-    message.append(.init(type: .xorMappedAddress, value: .xorAddress(address)))
+    message.appendAttribute(type: .xorMappedAddress, value: STUNXorAddress(address))
     try message.withUnsafeBytes {
-      let attribute = try STUNMessage(bytes: Array($0)).attribute(for: .xorMappedAddress)
-      XCTAssertEqual(attribute?.value.address, address)
+      XCTAssertEqual(try STUNMessage(bytes: Array($0)).attributeValue(for: .xorMappedAddress, as: STUNXorAddress.self)?.address, address)
     }
   }
 
   func testXorAddressV6() throws {
-    let address = SocketAddress(ip: .v6(.localhost), port: 3578)
+    let address = STUNAddress(ip: .v6(.localhost), port: 3578)
     var message = STUNMessage(type: .bindingResponse)
-    message.append(.init(type: .xorMappedAddress, value: .xorAddress(address)))
+    message.appendAttribute(type: .xorMappedAddress, value: STUNXorAddress(address))
     try message.withUnsafeBytes {
-      let attribute = try STUNMessage(bytes: Array($0)).attribute(for: .xorMappedAddress)
-      XCTAssertEqual(attribute?.value.address, address)
+      XCTAssertEqual(try STUNMessage(bytes: Array($0)).attributeValue(for: .xorMappedAddress, as: STUNXorAddress.self)?.address, address)
     }
   }
 
   func testChannel() throws {
     var message = STUNMessage(type: .bindingRequest)
-    message.append(.init(type: .channelNumber, value: .uint32(UInt32(UInt16.max))))
+    message.appendAttribute(type: .channelNumber, value: UInt32(UInt16.max))
     try message.withUnsafeBytes {
-      let attribute = try STUNMessage(bytes: Array($0)).attribute(for: .channelNumber)
-      XCTAssertEqual(attribute?.value.integer, Int(UInt16.max))
+      XCTAssertEqual(try STUNMessage(bytes: Array($0)).attributeValue(for: .channelNumber), UInt32(UInt16.max))
     }
   }
 
   func testErrorCode() throws {
     var message = STUNMessage(type: .bindingErrorResponse)
-    message.append(.init(type: .errorCode, value: .errorCode(.badRequest)))
+    message.appendAttribute(type: .errorCode, value: STUNErrorCode.badRequest)
     try message.withUnsafeBytes {
-      let attribute = try STUNMessage(bytes: Array($0)).attribute(for: .errorCode)
-      XCTAssertEqual(attribute?.value.errorCode, .badRequest)
+      XCTAssertEqual(try STUNMessage(bytes: Array($0)).attributeValue(for: .errorCode), STUNErrorCode.badRequest)
     }
   }
 
   func testUnknownAttributes() throws {
     var message = STUNMessage(type: .bindingErrorResponse)
-    message.append(.unknownAttributes([.nonce, .realm, .username]))
+    message.appendAttribute(type: .unknownAttributes, value: [.nonce, .realm, .username])
     try message.withUnsafeBytes {
-      let attribute = try STUNMessage(bytes: Array($0)).attribute(for: .unknownAttributes)
-      XCTAssertEqual(attribute?.value.uint16List, [STUNAttribute.Kind.nonce, STUNAttribute.Kind.realm, STUNAttribute.Kind.username].map(\.rawValue))
+      XCTAssertEqual(try STUNMessage(bytes: Array($0)).attributeValue(for: .unknownAttributes), [.nonce, .realm, .username])
     }
   }
 
   func testShortMessageIntegrity() throws {
     let credential = STUNCredential.short(password: "webrtc")
     var message = STUNMessage(type: .bindingRequest)
-    message.append(.messageIntegrity(credential))
+    message.appendMessageIntegrity(credential)
     XCTAssertTrue(try STUNMessage(bytes: message.withUnsafeBytes(Array.init)).validateMessageIntegrity(credential))
   }
 
   func testLongMessageIntegrity() throws {
     let credential = STUNCredential.long(username: "webrtc", password: "webrtc", realm: "webrtc")
     var message = STUNMessage(type: .bindingRequest)
-    message.append(.messageIntegrity(credential))
+    message.appendMessageIntegrity(credential)
     XCTAssertTrue(try STUNMessage(bytes: message.withUnsafeBytes(Array.init)).validateMessageIntegrity(credential))
   }
 
   func testFingerprint() throws {
     var message = STUNMessage(type: .bindingRequest)
-    message.append(.init(type: .username, value: .string("webrtc")))
-    message.append(.fingerprint())
+    message.appendAttribute(type: .username, value: "webrtc")
+    message.appendFingerprint()
     XCTAssertTrue(try STUNMessage(bytes: message.withUnsafeBytes(Array.init)).validateFingerprint())
   }
 

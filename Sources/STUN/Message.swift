@@ -6,6 +6,7 @@
 //  Copyright © 2020 sunlubo. All rights reserved.
 //
 
+import Network
 import Core
 
 // [RFC5389#section-6](https://tools.ietf.org/html/rfc5389#section-6)
@@ -22,7 +23,8 @@ import Core
 // |                                                               |
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 public struct STUNMessage {
-  internal static let magicCookie: UInt32 = 0x2112A442
+  internal static let headerSize = 20
+  internal static let magicCookie = 0x2112A442 as UInt32
 
   public let type: Kind
   public internal(set) var length: UInt16
@@ -38,85 +40,16 @@ public struct STUNMessage {
     self.magicCookie = Self.magicCookie
     self.transactionId = transactionId
     self.attributes = []
-    self.raw = ByteWriter(capacity: 20)
+    self.raw = ByteWriter(capacity: Self.headerSize)
     self.raw.writeInteger(type.rawValue)
     self.raw.writeInteger(length)
     self.raw.writeInteger(magicCookie)
     self.raw.writeBytes(transactionId.raw)
   }
 
-  public mutating func append(_ attribute: STUNAttribute) {
-    // When present, the `FINGERPRINT` attribute MUST be the last attribute in the message.
-    if let type = attributes.last?.type, type == .fingerprint {
-      return
-    }
-    // With the exception of the FINGERPRINT attribute, which appears after MESSAGE-INTEGRITY, agents MUST ignore
-    // all other attributes that follow MESSAGE-INTEGRITY.
-    if let type = attributes.last?.type, type == .messageIntegrity && attribute.type != .fingerprint {
-      return
-    }
-
-    length += 4
-    length += attribute.length + UInt16(attribute.padding)
-    raw.writeInteger(length, at: 2)
-
-    var bytes: Array<UInt8>
-    switch attribute.value {
-    case .address(let value):
-      bytes = value.bytes
-    case .xorAddress(let value):
-      let xor = [0x00, 0x00, 0x21, 0x12, 0x21, 0x12, 0xA4, 0x42] + transactionId.raw
-      bytes = zip(value.bytes, xor).map({ $0 ^ $1 })
-    case .uint32 where attribute.type == .fingerprint:
-      var crc32 = raw.withUnsafeBytes(Array.init).crc32
-      crc32 = (crc32 ^ 0x5354554e).bigEndian
-      bytes = withUnsafeMutableBytes(of: &crc32, Array.init)
-    case .uint32(let value):
-      bytes = Swift.withUnsafeBytes(of: value, Array.init)
-    case .uint64(let value):
-      bytes = Swift.withUnsafeBytes(of: value, Array.init)
-    case .string(let value):
-      bytes = value.bytes
-    case .errorCode(let value):
-      bytes = value.bytes
-    case .uint16List(let value):
-      bytes = value.withUnsafeBytes(Array.init)
-    case .flag(let value):
-      bytes = [value ? 1 : 0]
-    case .bytes(let value) where attribute.type == .messageIntegrity:
-      let hmac = HMAC(key: value, hash: .sha1)
-      bytes = hmac.authenticate(raw.withUnsafeBytes(Array.init))
-    case .bytes(let value):
-      bytes = value
-    case .null:
-      bytes = []
-    }
-    raw.writeInteger(attribute.type.rawValue)
-    raw.writeInteger(attribute.length)
-    raw.writeBytes(bytes)
-    raw.writeBytes(Array(repeating: 0, count: attribute.padding))
-
-    attributes.append(attribute)
-  }
-
-  public func attribute(for type: STUNAttribute.Kind) -> STUNAttribute? {
-    attributes.first(where: { $0.type == type })
-  }
-
   @discardableResult
   public func withUnsafeBytes<R>(_ body: (UnsafeRawBufferPointer) throws -> R) rethrows -> R {
     try raw.withUnsafeBytes(body)
-  }
-}
-
-extension STUNMessage {
-
-  public func contains(_ type: STUNAttribute.Kind) -> Bool {
-    attributes.contains(where: { $0.type == type })
-  }
-
-  public func forEach(_ body: (STUNAttribute) throws -> Void) rethrows {
-    try attributes.forEach(body)
   }
 }
 
@@ -134,9 +67,6 @@ extension STUNMessage {
     else {
       throw STUNError.invalidMessageHeader
     }
-    guard let type = STUNMessage.Kind(rawValue: rawType) else {
-      throw STUNError.unsupportedMessageType
-    }
     guard magicCookie == STUNMessage.magicCookie else {
       throw STUNError.invalidMagicCookiee
     }
@@ -153,42 +83,13 @@ extension STUNMessage {
         throw STUNError.invalidAttributeValue
       }
 
-      let type = STUNAttribute.Kind(rawValue: rawType)
-      let value: STUNAttribute.Value
-      switch type {
-      case .mappedAddress, .responseAddress, .sourceAddress, .changedAddress, .alternateServer, .responseOrigin, .otherAddress:
-        value = .address(try .init(bytes: reader.readBytes(count: Int(length))!))
-      case .xorMappedAddress, .xorPeerAddress, .xorRelayedAddress:
-        value = .xorAddress(try .init(bytes: reader.readBytes(count: Int(length))!, transactionId: .init(raw: transactionId)))
-      case .username, .software, .realm, .nonce:
-        value = .string(String(decoding: reader.readBytes(count: Int(length))!, as: UTF8.self))
-      case .channelNumber, .requestedTransport:
-        value = .uint32(reader.readInteger(endianness: .little)!)
-      case .evenPort:
-        value = .flag(reader.readInteger(as: UInt8.self) == 1)
-      case .reservationToken:
-        value = .uint64(reader.readInteger()!)
-      case .errorCode:
-        value = .errorCode(try .init(bytes: reader.readBytes(count: Int(length))!))
-      case .unknownAttributes:
-        value = .uint16List(
-          reader.readBytes(count: Int(length))!.withUnsafeBytes {
-            Array($0.bindMemory(to: UInt16.self))
-          }
-        )
-      case .fingerprint:
-        value = .uint32(reader.readInteger()!)
-      default:
-        value = .bytes(reader.readBytes(count: Int(length))!)
-      }
-
-      let attribute = STUNAttribute(type: type, value: value)
+      let attribute = STUNAttribute(type: .init(rawValue: rawType), value: reader.readBytes(count: Int(length))!)
       attributes.append(attribute)
 
       reader.consume(attribute.padding)
     }
 
-    self.type = type
+    self.type = .init(rawValue: rawType)
     self.length = length
     self.magicCookie = magicCookie
     self.transactionId = .init(raw: transactionId)
@@ -197,16 +98,92 @@ extension STUNMessage {
   }
 }
 
+// MARK: - Attribute Getter
+
 extension STUNMessage {
+
+  public func attributeValue<T>(
+    for type: STUNAttribute.Kind, as: T.Type = T.self
+  ) -> T? where T: STUNAttributeValueCodable {
+    guard var bytes = attribute(for: type)?.value else {
+      return nil
+    }
+
+    if T.self == STUNXorAddress.self {
+      let xor = [0x00, 0x00, 0x21, 0x12, 0x21, 0x12, 0xA4, 0x42] + transactionId.raw
+      bytes = zip(bytes, xor).map({ $0 ^ $1 })
+    }
+    return T(from: bytes)
+  }
+
+  public func attribute(for type: STUNAttribute.Kind) -> STUNAttribute? {
+    attributes.first(where: { $0.type == type })
+  }
+}
+
+// MARK: - Attribute Setter
+
+extension STUNMessage {
+
+  public mutating func appendAttribute(type: STUNAttribute.Kind, value: STUNAttributeValueCodable) {
+    var bytes = value.bytes
+    if value is STUNXorAddress {
+      let xor = [0x00, 0x00, 0x21, 0x12, 0x21, 0x12, 0xA4, 0x42] + transactionId.raw
+      bytes = zip(bytes, xor).map({ $0 ^ $1 })
+    }
+    appendAttribute(.init(type: type, value: bytes))
+  }
+
+  public mutating func appendAttribute(_ attribute: STUNAttribute) {
+    // When present, the `FINGERPRINT` attribute MUST be the last attribute in the message.
+    if let type = attributes.last?.type, type == .fingerprint {
+      return
+    }
+    // With the exception of the FINGERPRINT attribute, which appears after MESSAGE-INTEGRITY, agents MUST ignore
+    // all other attributes that follow MESSAGE-INTEGRITY.
+    if let type = attributes.last?.type, type == .messageIntegrity && attribute.type != .fingerprint {
+      return
+    }
+
+    length += 4
+    length += attribute.length + UInt16(attribute.padding)
+    raw.writeInteger(length, at: 2)
+    raw.writeInteger(attribute.type.rawValue)
+    raw.writeInteger(attribute.length)
+    raw.writeBytes(attribute.value)
+    raw.writeBytes(Array(repeating: 0, count: attribute.padding))
+
+    attributes.append(attribute)
+  }
+}
+
+// MARK: - Message Integrity
+
+extension STUNMessage {
+
+  public mutating func appendMessageIntegrity(_ credential: STUNCredential) {
+    length += 4
+    length += 20
+    raw.writeInteger(length, at: 2)
+
+    let hmac = HMAC(key: credential.key, hash: .sha1)
+    let bytes = hmac.authenticate(raw.withUnsafeBytes(Array.init))
+
+    length -= 4
+    length -= 20
+    raw.writeInteger(length, at: 2)
+
+    appendAttribute(.init(type: .messageIntegrity, value: bytes))
+  }
 
   /// Validates that a STUN message has a correct MESSAGE-INTEGRITY value.
   public func validateMessageIntegrity(_ credential: STUNCredential) -> Bool {
-    guard case .bytes(let value) = attribute(for: .messageIntegrity)?.value else {
+    guard let value = attribute(for: .messageIntegrity)?.value else {
       return false
     }
 
     var writer = raw
-    if contains(.fingerprint) {
+    if attribute(for: .fingerprint) != nil {
       writer.removeLast(8)
       writer.writeInteger(length - 8, at: 2)
     }
@@ -215,50 +192,77 @@ extension STUNMessage {
     let hmac = HMAC(key: credential.key, hash: .sha1).authenticate(writer.withUnsafeBytes(Array.init))
     return hmac == value
   }
+}
+
+// MARK: - Fingerprint
+
+extension STUNMessage {
+
+  public mutating func appendFingerprint() {
+    length += 4
+    length += 4
+    raw.writeInteger(length, at: 2)
+
+    let crc32 = raw.withUnsafeBytes(Array.init).crc32 ^ 0x5354554e
+    let bytes = Swift.withUnsafeBytes(of: crc32.bigEndian, Array.init)
+
+    length -= 4
+    length -= 4
+    raw.writeInteger(length, at: 2)
+
+    appendAttribute(.init(type: .fingerprint, value: bytes))
+  }
 
   public func validateFingerprint() -> Bool {
-    guard case .uint32(let value) = attribute(for: .fingerprint)?.value else {
+    guard let value = attribute(for: .fingerprint)?.value else {
       return false
     }
 
     var writer = raw
     writer.removeLast(8)
-    return writer.withUnsafeBytes(Array.init).crc32 == value ^ 0x5354554e
+    return writer.withUnsafeBytes(Array.init).crc32 == UInt32(bigEndianBytes: value) ^ 0x5354554e
   }
 }
 
 // MARK: - STUNMessage.Kind
 
 extension STUNMessage {
-  public enum Kind: UInt16 {
-    /// [RFC5389#section-7](https://tools.ietf.org/html/rfc5389#section-7)
-    case bindingRequest = 0x001
-    case bindingIndication = 0x011
-    case bindingResponse = 0x101
-    case bindingErrorResponse = 0x111
-    /// [RFC5766#section-5](https://tools.ietf.org/html/rfc5766#section-5)
-    case allocateRequest = 0x003
-    case allocateResponse = 0x0103
-    case allocateErrorResponse = 0x0113
-    /// [RFC5766#section-7](https://tools.ietf.org/html/rfc5766#section-7)
-    case refreshRequest = 0x004
-    case refreshResponse = 0x0104
-    case refreshErrorResponse = 0x0114
-    /// [RFC5766#section-10](https://tools.ietf.org/html/rfc5766#section-10)
-    case sendIndication = 0x016
-    case dataIndication = 0x017
-    /// [RFC5766#section-8](https://tools.ietf.org/html/rfc5766#section-8)
-    case createPermissionRequest = 0x008
-    case createPermissionResponse = 0x0108
-    case createPermissionErrorResponse = 0x0118
-    /// [RFC5766#section-11](https://tools.ietf.org/html/rfc5766#section-11)
-    case channelBindRequest = 0x009
-    case channelBindResponse = 0x0109
-    case channelBindErrorResponse = 0x0119
-
+  public struct Kind: RawRepresentable, Equatable {
+    public var rawValue: UInt16
     /// A Boolean value indicating whether the message is an indication.
     public var isIndication: Bool {
       rawValue & 0x0110 == 0x010
     }
+
+    public init(rawValue: UInt16) {
+      self.rawValue = rawValue
+    }
   }
+}
+
+extension STUNMessage.Kind {
+  /// [RFC5389#section-7](https://tools.ietf.org/html/rfc5389#section-7)
+  public static let bindingRequest = Self(rawValue: 0x001)
+  public static let bindingIndication = Self(rawValue: 0x011)
+  public static let bindingResponse = Self(rawValue: 0x101)
+  public static let bindingErrorResponse = Self(rawValue: 0x111)
+  /// [RFC5766#section-5](https://tools.ietf.org/html/rfc5766#section-5)
+  public static let allocateRequest = Self(rawValue: 0x003)
+  public static let allocateResponse = Self(rawValue: 0x0103)
+  public static let allocateErrorResponse = Self(rawValue: 0x0113)
+  /// [RFC5766#section-7](https://tools.ietf.org/html/rfc5766#section-7)
+  public static let refreshRequest = Self(rawValue: 0x004)
+  public static let refreshResponse = Self(rawValue: 0x0104)
+  public static let refreshErrorResponse = Self(rawValue: 0x0114)
+  /// [RFC5766#section-10](https://tools.ietf.org/html/rfc5766#section-10)
+  public static let sendIndication = Self(rawValue: 0x016)
+  public static let dataIndication = Self(rawValue: 0x017)
+  /// [RFC5766#section-8](https://tools.ietf.org/html/rfc5766#section-8)
+  public static let createPermissionRequest = Self(rawValue: 0x008)
+  public static let createPermissionResponse = Self(rawValue: 0x0108)
+  public static let createPermissionErrorResponse = Self(rawValue: 0x0118)
+  /// [RFC5766#section-11](https://tools.ietf.org/html/rfc5766#section-11)
+  public static let channelBindRequest = Self(rawValue: 0x009)
+  public static let channelBindResponse = Self(rawValue: 0x0109)
+  public static let channelBindErrorResponse = Self(rawValue: 0x0119)
 }

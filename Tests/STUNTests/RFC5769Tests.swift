@@ -50,10 +50,10 @@ final class RFC5769Tests: XCTestCase {
     XCTAssertEqual(message.magicCookie, STUNMessage.magicCookie)
     XCTAssertEqual(message.transactionId, .init(raw: [0xb7, 0xe7, 0xa7, 0x01, 0xbc, 0x34, 0xd6, 0x86, 0xfa, 0x87, 0xdf, 0xae]))
 
-    let software = message.attribute(for: .software)?.value.string
+    let software = message.attributeValue(for: .software, as: String.self)
     XCTAssertEqual(software, "STUN test client")
 
-    let username = message.attribute(for: .username)?.value.string
+    let username = message.attributeValue(for: .username, as: String.self)
     XCTAssertEqual(username, "evtj:h6vY")
 
     XCTAssertTrue(message.validateMessageIntegrity(.short(password: "VOkJxbRl1RmTxUk/WvJxBt")))
@@ -89,10 +89,10 @@ final class RFC5769Tests: XCTestCase {
     XCTAssertEqual(message.magicCookie, STUNMessage.magicCookie)
     XCTAssertEqual(message.transactionId, .init(raw: [0xb7, 0xe7, 0xa7, 0x01, 0xbc, 0x34, 0xd6, 0x86, 0xfa, 0x87, 0xdf, 0xae]))
 
-    let software = message.attribute(for: .software)?.value.string
+    let software = message.attributeValue(for: .software, as: String.self)
     XCTAssertEqual(software, "test vector")
 
-    let address = message.attribute(for: .xorMappedAddress)?.value.address
+    let address = message.attributeValue(for: .xorMappedAddress, as: STUNXorAddress.self)?.address
     XCTAssertEqual(address, SocketAddress(ip: .v4(IPv4Address("192.0.2.1")!), port: 32853))
 
     XCTAssertTrue(message.validateMessageIntegrity(.short(password: "VOkJxbRl1RmTxUk/WvJxBt")))
@@ -131,10 +131,10 @@ final class RFC5769Tests: XCTestCase {
     XCTAssertEqual(message.magicCookie, STUNMessage.magicCookie)
     XCTAssertEqual(message.transactionId, .init(raw: [0xb7, 0xe7, 0xa7, 0x01, 0xbc, 0x34, 0xd6, 0x86, 0xfa, 0x87, 0xdf, 0xae]))
 
-    let software = message.attribute(for: .software)?.value.string
+    let software = message.attributeValue(for: .software, as: String.self)
     XCTAssertEqual(software, "test vector")
 
-    let address = message.attribute(for: .xorMappedAddress)?.value.address
+    let address = message.attributeValue(for: .xorMappedAddress, as: STUNXorAddress.self)?.address
     XCTAssertEqual(address, SocketAddress(ip: .v6(IPv6Address("2001:db8:1234:5678:11:2233:4455:6677")!), port: 32853))
 
     XCTAssertTrue(message.validateMessageIntegrity(.short(password: "VOkJxbRl1RmTxUk/WvJxBt")))
@@ -179,13 +179,13 @@ final class RFC5769Tests: XCTestCase {
     XCTAssertEqual(message.magicCookie, STUNMessage.magicCookie)
     XCTAssertEqual(message.transactionId, .init(raw: [0x78, 0xad, 0x34, 0x33, 0xc6, 0xad, 0x72, 0xc0, 0x29, 0xda, 0x41, 0x2e]))
 
-    let username = message.attribute(for: .username)?.value.string
+    let username = message.attributeValue(for: .username, as: String.self)
     XCTAssertEqual(username, "\u{30DE}\u{30C8}\u{30EA}\u{30C3}\u{30AF}\u{30B9}")
 
-    let nonce = message.attribute(for: .nonce)?.value.string
+    let nonce = message.attributeValue(for: .nonce, as: String.self)
     XCTAssertEqual(nonce, "f//499k954d6OL34oL9FSTvy64sA")
 
-    let realm = message.attribute(for: .realm)?.value.string
+    let realm = message.attributeValue(for: .realm, as: String.self)
     XCTAssertEqual(realm, "example.org")
 
     XCTAssertTrue(message.validateMessageIntegrity(.long(username: username!, password: "TheMatrIX", realm: realm!)))

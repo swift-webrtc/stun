@@ -45,7 +45,7 @@ public final class NATBehaviorDiscovery {
     send(STUNMessage(type: .bindingRequest), to: serverAddress) { [self] result in
       switch result {
       case .success(let message):
-        guard let address1 = message.attribute(for: .xorMappedAddress)?.value.address else {
+        guard let address1 = message.attributeValue(for: .xorMappedAddress, as: STUNXorAddress.self)?.address else {
           completion(.failure(NATBehaviorDiscoveryError.attributeNotFound(.xorMappedAddress)))
           return
         }
@@ -55,7 +55,7 @@ public final class NATBehaviorDiscovery {
           return
         }
 
-        guard let otherAddress = message.attribute(for: .otherAddress)?.value.address else {
+        guard let otherAddress = message.attributeValue(for: .otherAddress, as: STUNAddress.self) else {
           completion(.failure(NATBehaviorDiscoveryError.attributeNotFound(.otherAddress)))
           return
         }
@@ -64,7 +64,7 @@ public final class NATBehaviorDiscovery {
         send(STUNMessage(type: .bindingRequest), to: SocketAddress(ip: otherAddress.ip, port: serverAddress.port)) { [self] result in
           switch result {
           case .success(let message):
-            guard let address2 = message.attribute(for: .xorMappedAddress)?.value.address else {
+            guard let address2 = message.attributeValue(for: .xorMappedAddress, as: STUNXorAddress.self)?.address else {
               completion(.failure(NATBehaviorDiscoveryError.attributeNotFound(.xorMappedAddress)))
               return
             }
@@ -78,7 +78,7 @@ public final class NATBehaviorDiscovery {
             send(STUNMessage(type: .bindingRequest), to: otherAddress) { result in
               switch result {
               case .success(let message):
-                guard let address3 = message.attribute(for: .xorMappedAddress)?.value.address else {
+                guard let address3 = message.attributeValue(for: .xorMappedAddress, as: STUNXorAddress.self)?.address else {
                   completion(.failure(NATBehaviorDiscoveryError.attributeNotFound(.xorMappedAddress)))
                   return
                 }
@@ -117,7 +117,7 @@ public final class NATBehaviorDiscovery {
 
         logger.debug("Running filtering behavior test II. Send binding request with change ip and change port flag")
         var message = STUNMessage(type: .bindingRequest)
-        message.append(.init(type: .changeRequest, value: .uint32(0x06000000)))
+        message.appendAttribute(type: .changeRequest, value: 0x00000006 as UInt32)
         send(message, to: serverAddress) { [self] result in
           switch result {
           case .success:
@@ -125,7 +125,7 @@ public final class NATBehaviorDiscovery {
           case .failure:
             logger.debug("Running filtering behavior test III. Send binding request with change port flag")
             var message = STUNMessage(type: .bindingRequest)
-            message.append(.init(type: .changeRequest, value: .uint32(0x02000000)))
+            message.appendAttribute(type: .changeRequest, value: 0x00000002 as UInt32)
             send(message, to: serverAddress) { result in
               switch result {
               case .success:

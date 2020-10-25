@@ -2,93 +2,46 @@
 //  Value.swift
 //  webrtc-stun
 //
-//  Created by sunlubo on 2020/9/17.
+//  Created by sunlubo on 2020/10/25.
 //  Copyright © 2020 sunlubo. All rights reserved.
 //
 
 import Network
+import Core
 
-extension STUNAttribute {
-  public enum Value {
-    case address(SocketAddress)
-    case xorAddress(SocketAddress)
-    case uint32(UInt32)
-    case uint64(UInt64)
-    case string(String)
-    case errorCode(ErrorCode)
-    case uint16List([UInt16])
-    case flag(Bool)
-    case bytes(Array<UInt8>)
-    case null
+public protocol STUNAttributeValueCodable {
+  var bytes: Array<UInt8> { get }
 
-    internal var size: Int {
-      switch self {
-      case .address(let value):
-        return value.isIPv4 ? 8 : 20
-      case .xorAddress(let value):
-        return value.isIPv4 ? 8 : 20
-      case .uint32:
-        return 4
-      case .uint64:
-        return 8
-      case .string(let value):
-        return value.utf8.count
-      case .errorCode(let value):
-        return 4 + value.reasonPhrase.count
-      case .uint16List(let value):
-        return value.count * 2
-      case .flag:
-        return 1
-      case .bytes(let value):
-        return value.count
-      case .null:
-        return 0
-      }
+  init?(from bytes: Array<UInt8>)
+}
+
+extension Int: STUNAttributeValueCodable {}
+extension Int8: STUNAttributeValueCodable {}
+extension Int16: STUNAttributeValueCodable {}
+extension Int32: STUNAttributeValueCodable {}
+extension Int64: STUNAttributeValueCodable {}
+extension UInt: STUNAttributeValueCodable {}
+extension UInt8: STUNAttributeValueCodable {}
+extension UInt16: STUNAttributeValueCodable {}
+extension UInt32: STUNAttributeValueCodable {}
+extension UInt64: STUNAttributeValueCodable {}
+
+extension STUNAttributeValueCodable where Self: FixedWidthInteger {
+  public var bytes: Array<UInt8> {
+    withUnsafeBytes(of: bigEndian, Array.init)
+  }
+
+  public init?(from bytes: Array<UInt8>) {
+    guard bytes.count == MemoryLayout<Self>.size else {
+      return nil
     }
+    self = Self(bigEndianBytes: bytes)
   }
 }
 
-extension STUNAttribute.Value {
-  public var address: SocketAddress? {
-    switch self {
-    case .address(let value):
-      return value
-    case .xorAddress(let value):
-      return value
-    default:
-      return nil
-    }
-  }
+extension String: STUNAttributeValueCodable {
 
-  public var integer: Int? {
-    switch self {
-    case .uint32(let value):
-      return Int(value)
-    case .uint64(let value):
-      return Int(value)
-    default:
-      return nil
-    }
-  }
-
-  public var string: String? {
-    guard case .string(let value) = self else {
-      return nil
-    }
-    return value
-  }
-
-  public var errorCode: ErrorCode? {
-    guard case .errorCode(let value) = self else {
-      return nil
-    }
-    return value
-  }
-
-  public var uint16List: [UInt16]? {
-    guard case .uint16List(let value) = self else {
-      return nil
-    }
-    return value
+  public init?(from bytes: Array<UInt8>) {
+    self = Self(decoding: bytes, as: UTF8.self)
   }
 }

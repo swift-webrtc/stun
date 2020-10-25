@@ -51,7 +51,7 @@ func main() throws {
       }
     }
   }
-  sleep(120)
+  sleep(180)
 }
 
 do {

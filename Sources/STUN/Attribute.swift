@@ -21,7 +21,7 @@ import Core
 public struct STUNAttribute {
   public let type: Kind
   public let length: UInt16
-  public let value: Value
+  public let value: Array<UInt8>
 
   /// Since STUN aligns attributes on 32-bit boundaries, attributes whose content
   /// is not a multiple of 4 bytes are padded with 1, 2, or 3 bytes of
@@ -31,31 +31,10 @@ public struct STUNAttribute {
     Int(length) % 4 != 0 ? 4 - Int(length) % 4 : 0
   }
 
-  internal init(type: Kind, length: UInt16, value: Value) {
+  public init(type: Kind, value: Array<UInt8>) {
     self.type = type
-    self.length = length
+    self.length = UInt16(value.count)
     self.value = value
-  }
-
-  public init(type: Kind, value: Value) {
-    self.type = type
-    self.length = UInt16(value.size)
-    self.value = value
-  }
-}
-
-extension STUNAttribute {
-
-  public static func unknownAttributes(_ value: [Kind]) -> Self {
-    Self(type: .unknownAttributes, value: .uint16List(value.map(\.rawValue)))
-  }
-
-  public static func messageIntegrity(_ credential: STUNCredential) -> Self {
-    Self(type: .messageIntegrity, length: 20, value: .bytes(credential.key))
-  }
-
-  public static func fingerprint() -> Self {
-    Self(type: .fingerprint, value: .uint32(0))
   }
 }
 
@@ -222,6 +201,20 @@ extension STUNAttribute.Kind: CustomStringConvertible {
       return "OTHER-ADDRESS"
     default:
       return "UNKNOWN: \(rawValue)"
+    }
+  }
+}
+
+// MARK: - STUNAttribute.Kind + STUNAttributeValueCodable
+
+extension Array: STUNAttributeValueCodable where Element == STUNAttribute.Kind {
+  public var bytes: Array<UInt8> {
+    map(\.rawValue.bigEndian).withUnsafeBytes(Array<UInt8>.init)
+  }
+
+  public init?(from bytes: Array<UInt8>) {
+    self = bytes.withUnsafeBytes {
+      Array($0.bindMemory(to: UInt16.self).map(\.bigEndian).map(Element.init(rawValue:)))
     }
   }
 }

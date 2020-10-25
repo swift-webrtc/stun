@@ -9,15 +9,24 @@
 import Network
 import Core
 
-// MARK: - Decode
+/// [RFC5389#section-15.1](https://tools.ietf.org/html/rfc5389#section-15.1)
+public typealias STUNAddress = SocketAddress
 
-extension SocketAddress {
+// MARK: - STUNAddress + STUNAttributeValueCodable
 
-  /// [RFC5389#section-15.1](https://tools.ietf.org/html/rfc5389#section-15.1)
-  internal init(bytes: Array<UInt8>) throws {
+extension STUNAddress: STUNAttributeValueCodable {
+  public var bytes: Array<UInt8> {
+    var writer = ByteWriter(capacity: ip.isIPv4 ? 8 : 20)
+    writer.writeInteger(ip.isIPv4 ? 0x0001 : 0x0002, as: UInt16.self)
+    writer.writeInteger(port.rawValue)
+    writer.writeBytes(ip.octets)
+    return writer.withUnsafeBytes(Array.init)
+  }
+
+  public init?(from bytes: Array<UInt8>) {
     var reader = ByteReader(bytes)
     guard let family = reader.readInteger(as: UInt16.self), let port = reader.readInteger(as: UInt16.self) else {
-      throw STUNError.invalidAddressValue
+      return nil
     }
 
     switch family {
@@ -39,55 +48,33 @@ extension SocketAddress {
         port: Port(rawValue: port)!
       )
     default:
-      throw STUNError.invalidAddressValue
-    }
-  }
-
-  /// [RFC5389#section-15.2](https://tools.ietf.org/html/rfc5389#section-15.2)
-  internal init(bytes: Array<UInt8>, transactionId: STUNTransactionId) throws {
-    var reader = ByteReader(bytes)
-    guard let family = reader.readInteger(as: UInt16.self), let port = reader.readInteger(as: UInt16.self) else {
-      throw STUNError.invalidAddressValue
-    }
-
-    switch family {
-    case 0x01 where reader.count == 4:
-      self = .init(
-        ip: .v4(
-          IPv4Address((reader.readInteger(as: UInt32.self)! ^ STUNMessage.magicCookie).bigEndian)
-        ),
-        port: Port(rawValue: port ^ UInt16(STUNMessage.magicCookie >> 16))!
-      )
-    case 0x02 where reader.count == 16:
-      self = .init(
-        ip: .v6(
-          transactionId.raw.withUnsafeBytes {
-            let ids = $0.bindMemory(to: UInt32.self)
-            return IPv6Address(
-              reader.readInteger(as: UInt32.self)! ^ STUNMessage.magicCookie,
-              reader.readInteger(as: UInt32.self)! ^ ids[0].bigEndian,
-              reader.readInteger(as: UInt32.self)! ^ ids[1].bigEndian,
-              reader.readInteger(as: UInt32.self)! ^ ids[2].bigEndian
-            )
-          }
-        ),
-        port: Port(rawValue: port ^ UInt16(STUNMessage.magicCookie >> 16))!
-      )
-    default:
-      throw STUNError.invalidAddressValue
+      return nil
     }
   }
 }
 
-// MARK: - Encode
+// MARK: - STUNXorAddress
 
-extension SocketAddress {
+/// [RFC5389#section-15.2](https://tools.ietf.org/html/rfc5389#section-15.2)
+public struct STUNXorAddress {
+  public var address: STUNAddress
 
-  internal var bytes: Array<UInt8> {
-    var writer = ByteWriter(capacity: ip.isIPv4 ? 8 : 20)
-    writer.writeInteger(ip.isIPv4 ? 0x0001 : 0x0002, as: UInt16.self)
-    writer.writeInteger(port.rawValue)
-    writer.writeBytes(ip.octets)
-    return writer.withUnsafeBytes(Array.init)
+  public init(_ address: STUNAddress) {
+    self.address = address
+  }
+}
+
+// MARK: - STUNXorAddress + STUNAttributeValueCodable
+
+extension STUNXorAddress: STUNAttributeValueCodable {
+  public var bytes: Array<UInt8> {
+    address.bytes
+  }
+
+  public init?(from bytes: Array<UInt8>) {
+    guard let address = STUNAddress(from: bytes) else {
+      return nil
+    }
+    self.address = address
   }
 }

@@ -10,11 +10,8 @@ public enum STUNError: Error {
   case invalidServer
   case timeout
   case invalidMessageHeader
-  case unsupportedMessageType
   case invalidMagicCookiee
   case invalidMessageBody
   case invalidAttributeHeader
   case invalidAttributeValue
-  case invalidAddressValue
-  case invalidErrorCodeValue
 }
