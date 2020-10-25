@@ -11,39 +11,6 @@ import Network
 import Core
 import Dispatch
 
-/// [Network Address Translation (NAT) Behavioral Requirements for Unicast UDP](https://tools.ietf.org/html/rfc4787)
-public enum NATBehavior {
-  case endpointIndependent
-  case addressDependent
-  case addressAndPortDependent
-}
-
-// MARK: - NATBehavior + CustomStringConvertible
-
-extension NATBehavior: CustomStringConvertible {
-  public var description: String {
-    switch self {
-    case .endpointIndependent:
-      return "Endpoint-Independent"
-    case .addressDependent:
-      return "Address-Dependent"
-    case .addressAndPortDependent:
-      return "Address and Port-Dependent"
-    }
-  }
-}
-
-// MARK: - NATBehaviorDiscoveryError
-
-public enum NATBehaviorDiscoveryError: Error {
-  case invalidLocalAddress
-  case invalidServer
-  case attributeNotFound(STUNAttribute.Kind)
-  case noUDPConnectivity
-}
-
-// MARK: - NATBehaviorDiscovery
-
 /// [NAT Behavior Discovery Using Session Traversal Utilities for NAT (STUN)](https://tools.ietf.org/html/rfc5780)
 public final class NATBehaviorDiscovery {
   internal var localAddress: SocketAddress
@@ -178,7 +145,7 @@ public final class NATBehaviorDiscovery {
 
 extension NATBehaviorDiscovery {
 
-  func send(_ message: STUNMessage, to address: SocketAddress, completion: @escaping STUNRequestHandler) {
+  internal func send(_ message: STUNMessage, to address: SocketAddress, completion: @escaping STUNRequestHandler) {
     queue.async { [self] in
       let transaction = Transaction(
         id: message.transactionId,
@@ -199,18 +166,29 @@ extension NATBehaviorDiscovery {
     }
   }
 
-  func close() {
+  internal func close() {
     queue.async { [self] in
       do {
         try socket.close()
       } catch {
-        logger.error("close: \(error)")
+        logger.error("\(error)")
       }
       thread.join()
     }
   }
 
-  func didTimeout(_ transactionId: STUNTransactionId) {
+  internal func didReceiveMessage(_ message: STUNMessage) {
+    if let transaction = transactions[message.transactionId] {
+      logger.trace("Receive response: \(message.type) - \(message.transactionId)")
+      transaction.timeoutTask.cancel()
+      transaction.handler?(.success(message))
+      transactions[message.transactionId] = nil
+    } else {
+      logger.trace("Receive indication: \(message.type)")
+    }
+  }
+
+  internal func didTimeout(_ transactionId: STUNTransactionId) {
     guard let transaction = transactions[transactionId] else {
       logger.warning("Invalid transaction: \(transactionId)")
       return
@@ -226,7 +204,7 @@ extension NATBehaviorDiscovery {
     }
 
     do {
-      logger.info("Resend request: \(transactionId)")
+      logger.trace("Resend request: \(transactionId)")
       try transaction.start(socket: socket, queue: queue)
     } catch {
       logger.trace("Failed to resend request: \(transactionId)")
@@ -235,19 +213,11 @@ extension NATBehaviorDiscovery {
       transactions[transaction.id] = nil
     }
   }
+}
 
-  func didReceiveMessage(_ message: STUNMessage) {
-    if let transaction = transactions[message.transactionId] {
-      logger.trace("Receive response: \(message.type) - \(message.transactionId)")
-      transaction.timeoutTask.cancel()
-      transaction.handler?(.success(message))
-      transactions[message.transactionId] = nil
-    } else {
-      logger.trace("Receive indication: \(message.type)")
-    }
-  }
+extension NATBehaviorDiscovery {
 
-  func loop() {
+  internal func loop() {
     let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 1024)
     buffer.initialize(repeating: 0, count: 1024)
     defer {
@@ -262,57 +232,11 @@ extension NATBehaviorDiscovery {
           didReceiveMessage(message)
         }
       } catch let error as STUNError {
-        logger.error("Receive invalid stun packet: \(error)")
+        logger.error("Invalid STUN packet: \(error)")
       } catch {
         logger.error("Receive failed: \(error)")
         break
       }
     }
-  }
-}
-
-extension NATBehaviorDiscovery {
-  final class Transaction {
-    internal var id: STUNTransactionId
-    internal var raw: Array<UInt8>
-    internal var destinationAddress: SocketAddress
-    internal var handler: STUNRequestHandler?
-    internal var rto: Duration
-    internal var attemptCount: Int = 0
-    internal var timeoutTask: DispatchWorkItem
-
-    internal init(
-      id: STUNTransactionId,
-      raw: Array<UInt8>,
-      destinationAddress: SocketAddress,
-      handler: STUNRequestHandler?,
-      rto: Duration,
-      timeoutHandler: @escaping (STUNTransactionId) -> Void
-    ) {
-      self.id = id
-      self.raw = raw
-      self.destinationAddress = destinationAddress
-      self.handler = handler
-      self.rto = rto
-      self.timeoutTask = DispatchWorkItem {
-        timeoutHandler(id)
-      }
-    }
-
-    internal func start(socket: UDPSocket, queue: DispatchQueue) throws {
-      _ = try raw.withUnsafeBytes {
-        try socket.sendto($0, address: destinationAddress)
-      }
-      queue.asyncAfter(deadline: .now() + .milliseconds(min(rto.milliseconds << attemptCount, 8000)), execute: timeoutTask)
-    }
-  }
-}
-
-// MARK: - NATBehaviorDiscovery.Transaction + Equatable
-
-extension NATBehaviorDiscovery.Transaction: Equatable {
-
-  internal static func == (lhs: NATBehaviorDiscovery.Transaction, rhs: NATBehaviorDiscovery.Transaction) -> Bool {
-    lhs.id == rhs.id
   }
 }

@@ -26,7 +26,7 @@ public final class STUNClient {
   }
 
   internal var configuration: Configuration
-  internal var transactions: [STUNTransactionId: STUNTransaction]
+  internal var transactions: [STUNTransactionId: Transaction]
   internal var socket: UDPSocket
   internal var queue: DispatchQueue
   internal var thread: Thread!
@@ -52,7 +52,7 @@ public final class STUNClient {
         return
       }
 
-      let transaction = STUNTransaction(
+      let transaction = Transaction(
         id: message.transactionId,
         raw: message.withUnsafeBytes(Array.init),
         handler: completion,
@@ -75,15 +75,27 @@ public final class STUNClient {
       do {
         try socket.close()
       } catch {
-        logger.error("close: \(error)")
+        logger.error("\(error)")
       }
       thread.join()
     }
   }
 
-  internal func strat(_ transaction: STUNTransaction) throws {
+  internal func strat(_ transaction: Transaction) throws {
     _ = try transaction.raw.withUnsafeBytes(socket.send(_:))
     transaction.start(on: queue)
+  }
+
+  internal func didReceiveMessage(_ message: STUNMessage) {
+    if let transaction = transactions[message.transactionId] {
+      logger.trace("Receive response: \(message.type) - \(message.transactionId)")
+      transaction.timeoutTask.cancel()
+      transaction.handler?(.success(message))
+      transactions[message.transactionId] = nil
+    } else {
+      logger.trace("Receive indication: \(message.type)")
+      configuration.indicationHandler?(message)
+    }
   }
 
   internal func didTimeout(_ transactionId: STUNTransactionId) {
@@ -102,7 +114,7 @@ public final class STUNClient {
     }
 
     do {
-      logger.info("Resend request: \(transactionId)")
+      logger.trace("Resend request: \(transactionId)")
       try strat(transaction)
     } catch {
       logger.trace("Failed to resend request: \(transactionId)")
@@ -114,18 +126,6 @@ public final class STUNClient {
 }
 
 extension STUNClient {
-
-  internal func didReceiveMessage(_ message: STUNMessage) {
-    if let transaction = transactions[message.transactionId] {
-      logger.trace("Receive response: \(message.type) - \(message.transactionId)")
-      transaction.timeoutTask.cancel()
-      transaction.handler?(.success(message))
-      transactions[message.transactionId] = nil
-    } else {
-      logger.trace("Receive indication: \(message.type)")
-      configuration.indicationHandler?(message)
-    }
-  }
 
   internal func loop() {
     let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 1024)
@@ -142,7 +142,7 @@ extension STUNClient {
           didReceiveMessage(message)
         }
       } catch let error as STUNError {
-        logger.error("Receive invalid stun packet: \(error)")
+        logger.error("Invalid STUN packet: \(error)")
       } catch {
         logger.error("Receive failed: \(error)")
         break
