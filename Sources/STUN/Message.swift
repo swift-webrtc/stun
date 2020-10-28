@@ -179,7 +179,7 @@ extension STUNMessage {
   /// Validates that a STUN message has a correct MESSAGE-INTEGRITY value.
   public func validateMessageIntegrity(_ credential: STUNCredential) -> Bool {
     guard let value = attribute(for: .messageIntegrity)?.value else {
-      return false
+      return true
     }
 
     var writer = raw
@@ -215,7 +215,7 @@ extension STUNMessage {
 
   public func validateFingerprint() -> Bool {
     guard let value = attribute(for: .fingerprint)?.value else {
-      return false
+      return true
     }
 
     var writer = raw
