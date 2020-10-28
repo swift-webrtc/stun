@@ -224,6 +224,43 @@ extension STUNMessage {
   }
 }
 
+// MARK: - STUNMessage + CustomStringConvertible
+
+extension STUNMessage: CustomStringConvertible {
+  public var description: String {
+    var string = "STUNMessage(type: \(type), id: \(transactionId), attributes: ["
+    for (index, attr) in attributes.enumerated() {
+      var valueString: String?
+      switch attr.type {
+      case .mappedAddress, .responseAddress, .sourceAddress, .changedAddress, .alternateServer, .responseOrigin, .otherAddress:
+        valueString = attributeValue(for: attr.type, as: SocketAddress.self)?.description
+      case .xorPeerAddress, .xorRelayedAddress, .xorMappedAddress:
+        valueString = attributeValue(for: attr.type, as: STUNXorAddress.self)?.address.description
+      case .username, .realm, .nonce, .software:
+        valueString = attributeValue(for: attr.type, as: String.self)
+      case .channelNumber, .requestedTransport, .fingerprint:
+        valueString = attributeValue(for: attr.type, as: UInt32.self)?.description
+      case .evenPort:
+        valueString = attributeValue(for: attr.type, as: UInt8.self)?.description
+      case .reservationToken:
+        valueString = attributeValue(for: attr.type, as: UInt64.self)?.description
+      case .errorCode:
+        valueString = attributeValue(for: attr.type, as: STUNErrorCode.self)?.description
+      case .unknownAttributes:
+        valueString = attributeValue(for: attr.type, as: [STUNAttribute.Kind].self)?.description
+      default:
+        valueString = attr.value.description
+      }
+      string.append("STUNAttribute(type: \(attr.type), value: \(valueString ?? "invalid"))")
+      if index != attributes.count - 1 {
+        string.append(", ")
+      }
+    }
+    string.append("])")
+    return string
+  }
+}
+
 // MARK: - STUNMessage.Kind
 
 extension STUNMessage {
@@ -265,4 +302,51 @@ extension STUNMessage.Kind {
   public static let channelBindRequest = Self(rawValue: 0x009)
   public static let channelBindResponse = Self(rawValue: 0x0109)
   public static let channelBindErrorResponse = Self(rawValue: 0x0119)
+}
+
+// MARK: - STUNMessage.Kind + CustomStringConvertible
+
+extension STUNMessage.Kind: CustomStringConvertible {
+  public var description: String {
+    switch self {
+    case .bindingRequest:
+      return "bindingRequest"
+    case .bindingIndication:
+      return "bindingIndication"
+    case .bindingResponse:
+      return "bindingResponse"
+    case .bindingErrorResponse:
+      return "bindingErrorResponse"
+    case .allocateRequest:
+      return "allocateRequest"
+    case .allocateResponse:
+      return "allocateResponse"
+    case .allocateErrorResponse:
+      return "allocateErrorResponse"
+    case .refreshRequest:
+      return "refreshRequest"
+    case .refreshResponse:
+      return "refreshResponse"
+    case .refreshErrorResponse:
+      return "refreshErrorResponse"
+    case .sendIndication:
+      return "sendIndication"
+    case .dataIndication:
+      return "dataIndication"
+    case .createPermissionRequest:
+      return "createPermissionRequest"
+    case .createPermissionResponse:
+      return "createPermissionResponse"
+    case .createPermissionErrorResponse:
+      return "createPermissionErrorResponse"
+    case .channelBindRequest:
+      return "channelBindRequest"
+    case .channelBindResponse:
+      return "channelBindResponse"
+    case .channelBindErrorResponse:
+      return "channelBindErrorResponse"
+    default:
+      return "Kind(rawValue: \(rawValue)"
+    }
+  }
 }

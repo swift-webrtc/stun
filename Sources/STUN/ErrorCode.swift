@@ -50,6 +50,14 @@ extension STUNErrorCode: Equatable {
   }
 }
 
+// MARK: - STUNErrorCode + CustomStringConvertible
+
+extension STUNErrorCode: CustomStringConvertible {
+  public var description: String {
+    "STUNErrorCode(code: \(code), reasonPhrase:\(reasonPhrase))"
+  }
+}
+
 // MARK: - STUNErrorCode + STUNAttributeValueCodable
 
 extension STUNErrorCode: STUNAttributeValueCodable {

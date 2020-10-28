@@ -200,7 +200,7 @@ extension STUNAttribute.Kind: CustomStringConvertible {
     case .otherAddress:
       return "OTHER-ADDRESS"
     default:
-      return "UNKNOWN: \(rawValue)"
+      return "Kind(rawValue: \(rawValue)"
     }
   }
 }
