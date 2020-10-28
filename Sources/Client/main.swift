@@ -39,7 +39,7 @@ func main() throws {
 }
 
 do {
-  logger.logLevel = .trace
+  LoggerConfiguration.default.logLevel = .trace
   try main()
 } catch {
   print(error)

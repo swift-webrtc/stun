@@ -15,6 +15,12 @@ import Darwin.C
 import Glibc
 #endif
 
+let logger: Logger = {
+  var l = Logger(label: "swift-webrtc.NATBehaviorDiscovery")
+  l.logLevel = .trace
+  return l
+}()
+
 // https://www.voip-info.org/stun/
 func main() throws {
   let discovery = try NATBehaviorDiscovery(server: "stun:stun.stunprotocol.org:3478")
@@ -55,7 +61,6 @@ func main() throws {
 }
 
 do {
-  logger.logLevel = .trace
   try main()
 } catch {
   print(error)
