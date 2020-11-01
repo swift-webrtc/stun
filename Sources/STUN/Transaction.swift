@@ -6,35 +6,56 @@
 //  Copyright © 2020 sunlubo. All rights reserved.
 //
 
+import AsyncIO
 import Core
-import Dispatch
 
 internal final class Transaction {
-  internal var id: STUNTransactionId
-  internal var raw: Array<UInt8>
-  internal var handler: STUNRequestHandler?
+  internal var message: STUNMessage
+  internal var address: SocketAddress
+  internal var handler: STUNResponseHandler?
   internal var rto: Duration
   internal var attemptCount: Int = 0
-  internal var timeoutTask: DispatchWorkItem
+  internal var timeoutHandler: (Transaction) -> Void
+  internal var timeoutTask: Cancellable?
 
   internal init(
-    id: STUNTransactionId,
-    raw: Array<UInt8>,
-    handler: STUNRequestHandler?,
+    message: STUNMessage,
+    address: SocketAddress,
+    handler: STUNResponseHandler?,
     rto: Duration,
-    timeoutHandler: @escaping (STUNTransactionId) -> Void
+    timeoutHandler: @escaping (Transaction) -> Void
   ) {
-    self.id = id
-    self.raw = raw
+    self.message = message
+    self.address = address
     self.handler = handler
     self.rto = rto
-    self.timeoutTask = DispatchWorkItem {
-      timeoutHandler(id)
+    self.timeoutHandler = timeoutHandler
+  }
+
+  deinit {
+    logger.debug("\(self) is deinit", metadata: ["transactionId": "\(message.transactionId)"])
+  }
+
+  internal func start(on eventLoop: EventLoop) {
+    let delay = min(rto.milliseconds << attemptCount, 8000)
+    timeoutTask = eventLoop.schedule(delay: .milliseconds(delay)) { [self] _ in
+      timeoutHandler(self)
     }
   }
 
-  internal func start(on queue: DispatchQueue) {
-    queue.asyncAfter(deadline: .now() + .milliseconds(min(rto.milliseconds << attemptCount, 8000)), execute: timeoutTask)
+  internal func cancel() {
+    timeoutTask?.cancel()
+    timeoutTask = nil
+  }
+
+  internal func onSuccess(_ value: STUNMessage) {
+    handler?(.success(value))
+    handler = nil
+  }
+
+  internal func onError(_ error: Error) {
+    handler?(.failure(error))
+    handler = nil
   }
 }
 
@@ -43,6 +64,6 @@ internal final class Transaction {
 extension Transaction: Equatable {
 
   internal static func == (lhs: Transaction, rhs: Transaction) -> Bool {
-    lhs.id == rhs.id
+    lhs.message.transactionId == rhs.message.transactionId
   }
 }

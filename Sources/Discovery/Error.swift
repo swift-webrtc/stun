@@ -9,8 +9,7 @@
 import STUN
 
 public enum NATBehaviorDiscoveryError: Error {
-  case invalidLocalAddress
-  case invalidServer
-  case attributeNotFound(STUNAttribute.Kind)
+  case localAddressNotExist
   case noUDPConnectivity
+  case attributeNotFound(STUNAttribute.Kind)
 }

@@ -6,7 +6,7 @@
 //  Copyright © 2020 sunlubo. All rights reserved.
 //
 
-import Network
+import AsyncIO
 import Core
 
 // [RFC5389#section-6](https://tools.ietf.org/html/rfc5389#section-6)
@@ -139,8 +139,8 @@ extension STUNMessage {
     if let type = attributes.last?.type, type == .fingerprint {
       return
     }
-    // With the exception of the FINGERPRINT attribute, which appears after MESSAGE-INTEGRITY, agents MUST ignore
-    // all other attributes that follow MESSAGE-INTEGRITY.
+    // With the exception of the FINGERPRINT attribute, which appears after MESSAGE-INTEGRITY,
+    // agents MUST ignore all other attributes that follow MESSAGE-INTEGRITY.
     if let type = attributes.last?.type, type == .messageIntegrity && attribute.type != .fingerprint {
       return
     }
@@ -179,7 +179,7 @@ extension STUNMessage {
   /// Validates that a STUN message has a correct MESSAGE-INTEGRITY value.
   public func validateMessageIntegrity(_ credential: STUNCredential) -> Bool {
     guard let value = attribute(for: .messageIntegrity)?.value else {
-      return true
+      return false
     }
 
     var writer = raw
@@ -215,7 +215,7 @@ extension STUNMessage {
 
   public func validateFingerprint() -> Bool {
     guard let value = attribute(for: .fingerprint)?.value else {
-      return true
+      return false
     }
 
     var writer = raw
@@ -228,14 +228,14 @@ extension STUNMessage {
 
 extension STUNMessage: CustomStringConvertible {
   public var description: String {
-    var string = "STUNMessage(type: \(type), id: \(transactionId), attributes: ["
+    var string = "Message(type: \(type), id: \(transactionId), attributes: ["
     for (index, attr) in attributes.enumerated() {
       var valueString: String?
       switch attr.type {
       case .mappedAddress, .responseAddress, .sourceAddress, .changedAddress, .alternateServer, .responseOrigin, .otherAddress:
         valueString = attributeValue(for: attr.type, as: SocketAddress.self)?.description
       case .xorPeerAddress, .xorRelayedAddress, .xorMappedAddress:
-        valueString = attributeValue(for: attr.type, as: STUNXorAddress.self)?.address.description
+        valueString = attributeValue(for: attr.type, as: STUNXorAddress.self)?.description
       case .username, .realm, .nonce, .software:
         valueString = attributeValue(for: attr.type, as: String.self)
       case .channelNumber, .requestedTransport, .fingerprint:
@@ -251,7 +251,7 @@ extension STUNMessage: CustomStringConvertible {
       default:
         valueString = attr.value.description
       }
-      string.append("STUNAttribute(type: \(attr.type), value: \(valueString ?? "invalid"))")
+      string.append("Attribute(type: \(attr.type), value: \(valueString ?? "invalid"))")
       if index != attributes.count - 1 {
         string.append(", ")
       }
@@ -264,12 +264,88 @@ extension STUNMessage: CustomStringConvertible {
 // MARK: - STUNMessage.Kind
 
 extension STUNMessage {
+  // [RFC5389#section-6](https://tools.ietf.org/html/rfc5389#section-6)
+  // 0                 1
+  // 2  3  4 5 6 7 8 9 0 1 2 3 4 5
+  //
+  // +--+--+-+-+-+-+-+-+-+-+-+-+-+-+
+  // |M |M |M|M|M|C|M|M|M|C|M|M|M|M|
+  // |11|10|9|8|7|1|6|5|4|0|3|2|1|0|
+  // +--+--+-+-+-+-+-+-+-+-+-+-+-+-+
   public struct Kind: RawRepresentable, Equatable {
+    public var method: Method
+    public var `class`: Class
     public var rawValue: UInt16
-    /// A Boolean value indicating whether the message is an indication.
-    public var isIndication: Bool {
-      rawValue & 0x0110 == 0x010
+
+    public init(method: Method, `class`: Class) {
+      self.method = method
+      self.class = `class`
+      self.rawValue = method.rawValue | `class`.rawValue
     }
+
+    public init(rawValue: UInt16) {
+      self.method = Method(rawValue: rawValue & 0x3EEF)
+      self.class = Class(rawValue: rawValue & 0x0110)!
+      self.rawValue = rawValue
+    }
+  }
+}
+
+// MARK: - STUNMessage.Kind + CustomStringConvertible
+
+extension STUNMessage.Kind: CustomStringConvertible {
+  public var description: String {
+    return "\(method)-\(`class`)"
+  }
+}
+
+// MARK: - STUNMessage.Kind.Class
+
+extension STUNMessage.Kind {
+  public enum Class: UInt16, Equatable {
+    case request = 0x000
+    case indication = 0x010
+    case response = 0x100
+    case errorResponse = 0x110
+  }
+}
+
+// MARK: - STUNMessage.Kind.Class + CustomStringConvertible
+
+extension STUNMessage.Kind.Class: CustomStringConvertible {
+  public var description: String {
+    switch self {
+    case .request:
+      return "request"
+    case .indication:
+      return "indication"
+    case .response:
+      return "response"
+    case .errorResponse:
+      return "errorResponse"
+    }
+  }
+}
+
+// MARK: - STUNMessage.Kind.Method
+
+extension STUNMessage.Kind {
+  public struct Method: RawRepresentable, Equatable {
+    /// [RFC5389#section-7](https://tools.ietf.org/html/rfc5389#section-7)
+    public static let binding = Self(rawValue: 0x001)
+    /// [RFC5766#section-5](https://tools.ietf.org/html/rfc5766#section-5)
+    public static let allocate = Self(rawValue: 0x003)
+    /// [RFC5766#section-7](https://tools.ietf.org/html/rfc5766#section-7)
+    public static let refresh = Self(rawValue: 0x004)
+    /// [RFC5766#section-10](https://tools.ietf.org/html/rfc5766#section-10)
+    public static let send = Self(rawValue: 0x006)
+    public static let data = Self(rawValue: 0x007)
+    /// [RFC5766#section-8](https://tools.ietf.org/html/rfc5766#section-8)
+    public static let createPermission = Self(rawValue: 0x008)
+    /// [RFC5766#section-11](https://tools.ietf.org/html/rfc5766#section-11)
+    public static let channelBind = Self(rawValue: 0x009)
+
+    public var rawValue: UInt16
 
     public init(rawValue: UInt16) {
       self.rawValue = rawValue
@@ -277,76 +353,27 @@ extension STUNMessage {
   }
 }
 
-extension STUNMessage.Kind {
-  /// [RFC5389#section-7](https://tools.ietf.org/html/rfc5389#section-7)
-  public static let bindingRequest = Self(rawValue: 0x001)
-  public static let bindingIndication = Self(rawValue: 0x011)
-  public static let bindingResponse = Self(rawValue: 0x101)
-  public static let bindingErrorResponse = Self(rawValue: 0x111)
-  /// [RFC5766#section-5](https://tools.ietf.org/html/rfc5766#section-5)
-  public static let allocateRequest = Self(rawValue: 0x003)
-  public static let allocateResponse = Self(rawValue: 0x0103)
-  public static let allocateErrorResponse = Self(rawValue: 0x0113)
-  /// [RFC5766#section-7](https://tools.ietf.org/html/rfc5766#section-7)
-  public static let refreshRequest = Self(rawValue: 0x004)
-  public static let refreshResponse = Self(rawValue: 0x0104)
-  public static let refreshErrorResponse = Self(rawValue: 0x0114)
-  /// [RFC5766#section-10](https://tools.ietf.org/html/rfc5766#section-10)
-  public static let sendIndication = Self(rawValue: 0x016)
-  public static let dataIndication = Self(rawValue: 0x017)
-  /// [RFC5766#section-8](https://tools.ietf.org/html/rfc5766#section-8)
-  public static let createPermissionRequest = Self(rawValue: 0x008)
-  public static let createPermissionResponse = Self(rawValue: 0x0108)
-  public static let createPermissionErrorResponse = Self(rawValue: 0x0118)
-  /// [RFC5766#section-11](https://tools.ietf.org/html/rfc5766#section-11)
-  public static let channelBindRequest = Self(rawValue: 0x009)
-  public static let channelBindResponse = Self(rawValue: 0x0109)
-  public static let channelBindErrorResponse = Self(rawValue: 0x0119)
-}
+// MARK: - STUNMessage.Kind.Method + CustomStringConvertible
 
-// MARK: - STUNMessage.Kind + CustomStringConvertible
-
-extension STUNMessage.Kind: CustomStringConvertible {
+extension STUNMessage.Kind.Method: CustomStringConvertible {
   public var description: String {
     switch self {
-    case .bindingRequest:
-      return "bindingRequest"
-    case .bindingIndication:
-      return "bindingIndication"
-    case .bindingResponse:
-      return "bindingResponse"
-    case .bindingErrorResponse:
-      return "bindingErrorResponse"
-    case .allocateRequest:
-      return "allocateRequest"
-    case .allocateResponse:
-      return "allocateResponse"
-    case .allocateErrorResponse:
-      return "allocateErrorResponse"
-    case .refreshRequest:
-      return "refreshRequest"
-    case .refreshResponse:
-      return "refreshResponse"
-    case .refreshErrorResponse:
-      return "refreshErrorResponse"
-    case .sendIndication:
-      return "sendIndication"
-    case .dataIndication:
-      return "dataIndication"
-    case .createPermissionRequest:
-      return "createPermissionRequest"
-    case .createPermissionResponse:
-      return "createPermissionResponse"
-    case .createPermissionErrorResponse:
-      return "createPermissionErrorResponse"
-    case .channelBindRequest:
-      return "channelBindRequest"
-    case .channelBindResponse:
-      return "channelBindResponse"
-    case .channelBindErrorResponse:
-      return "channelBindErrorResponse"
+    case .binding:
+      return "binding"
+    case .allocate:
+      return "allocate"
+    case .refresh:
+      return "refresh"
+    case .send:
+      return "send"
+    case .data:
+      return "data"
+    case .createPermission:
+      return "createPermission"
+    case .channelBind:
+      return "channelBind"
     default:
-      return "Kind(rawValue: \(rawValue)"
+      return "Method(rawValue: \(rawValue)"
     }
   }
 }

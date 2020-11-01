@@ -8,7 +8,7 @@
 
 @testable
 import STUN
-import Network
+import AsyncIO
 import Core
 import XCTest
 

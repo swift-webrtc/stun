@@ -6,148 +6,157 @@
 //  Copyright © 2020 sunlubo. All rights reserved.
 //
 
-import Network
+import AsyncIO
 import Core
-import Dispatch
 
-public typealias STUNRequestHandler = (Result<STUNMessage, Error>) -> Void
+public typealias STUNResponseHandler = (Result<STUNMessage, Error>) -> Void
 public typealias STUNIndicationHandler = (STUNMessage) -> Void
 
-/// [RFC5389#section-7.2.1](https://tools.ietf.org/html/rfc5389#section-7.2.1)
+/// [ Session Traversal Utilities for NAT (STUN)](https://tools.ietf.org/html/rfc5389)
 public final class STUNClient {
-
-  public static func connect(to server: String, configuration: Configuration) throws -> STUNClient {
-    guard let (scheme, host, port) = parseURI(server), scheme == "stun" else {
-      throw STUNError.invalidServer
-    }
-
-    let socket = try UDPSocket.connect(to: SocketAddress(ip: host, port: port ?? .stun))
-    return STUNClient(socket: socket, configuration: configuration)
-  }
-
   internal var configuration: Configuration
-  internal var transactions: [STUNTransactionId: Transaction]
+  internal var transactions: [STUNTransactionId: Transaction] = [:]
   internal var socket: UDPSocket
-  internal var queue: DispatchQueue
-  internal var thread: Thread!
 
-  internal init(socket: UDPSocket, configuration: Configuration) {
-    self.configuration = configuration
-    self.transactions = [:]
-    self.socket = socket
-    self.queue = DispatchQueue(label: "STUNClient")
-    self.thread = Thread { [unowned self] in loop() }
-    self.thread.start()
+  public var localAddress: SocketAddress? {
+    socket.localAddress
   }
 
-  public func send(_ message: STUNMessage, completion: STUNRequestHandler? = nil) {
-    queue.async { [self] in
-      if message.type.isIndication {
-        do {
-          logger.trace("Send indication: \(message.type)")
-          try message.withUnsafeBytes(socket.send(_:))
-        } catch {
-          logger.trace("Failed to send indication: \(message.type)")
-        }
+  public init(configuration: Configuration) {
+    self.configuration = configuration
+    self.socket = UDPSocket(eventLoop: configuration.eventLoop)
+    self.socket.delegate = self
+  }
+
+  deinit {
+    logger.debug("\(self) is deinit")
+  }
+
+  public func bind(to address: SocketAddress = SocketAddress(ip: .v4(.any), port: 0)) throws {
+    try socket.bind(to: address)
+  }
+
+  public func send(
+    _ message: STUNMessage,
+    to address: SocketAddress? = nil,
+    completion handler: STUNResponseHandler? = nil
+  ) {
+    async { [self] in
+      if message.type.class == .indication {
+        send(message, to: address ?? configuration.server)
         return
       }
 
       let transaction = Transaction(
-        id: message.transactionId,
-        raw: message.withUnsafeBytes(Array.init),
-        handler: completion,
+        message: message,
+        address: address ?? configuration.server,
+        handler: handler,
         rto: configuration.rto,
         timeoutHandler: didTimeout(_:)
       )
-      do {
-        logger.trace("Send request: \(message.type) - \(message.transactionId)")
-        try strat(transaction)
-        transactions[message.transactionId] = transaction
-      } catch {
-        logger.trace("Failed to send request: \(message.type) - \(message.transactionId) - \(error)")
-        transaction.handler?(.failure(error))
+      transaction.start(on: configuration.eventLoop)
+      transactions[message.transactionId] = transaction
+      send(transaction.message, to: transaction.address) { result in
+        if case .failure(let error) = result {
+          transaction.cancel()
+          transaction.onError(error)
+          transactions[transaction.message.transactionId] = nil
+        }
       }
     }
   }
 
   public func close() {
-    queue.async { [self] in
-      do {
-        try socket.close()
-      } catch {
-        logger.error("\(error)")
+    async { [self] in
+      for transaction in transactions.values {
+        logger.trace("Transaction canceled", metadata: ["transactionId": "\(transaction.message.transactionId)"])
+        transaction.cancel()
+        transaction.onError(STUNError.canceled)
       }
-      thread.join()
-    }
-  }
-
-  internal func strat(_ transaction: Transaction) throws {
-    _ = try transaction.raw.withUnsafeBytes(socket.send(_:))
-    transaction.start(on: queue)
-  }
-
-  internal func didReceiveMessage(_ message: STUNMessage) {
-    if let transaction = transactions[message.transactionId] {
-      logger.trace("Receive response: \(message.type) - \(message.transactionId)")
-      transaction.timeoutTask.cancel()
-      transaction.handler?(.success(message))
-      transactions[message.transactionId] = nil
-    } else {
-      logger.trace("Receive indication: \(message.type)")
-      configuration.indicationHandler?(message)
-    }
-  }
-
-  internal func didTimeout(_ transactionId: STUNTransactionId) {
-    guard let transaction = transactions[transactionId] else {
-      logger.warning("Invalid transaction: \(transactionId)")
-      return
-    }
-
-    transaction.attemptCount += 1
-    guard transaction.attemptCount <= configuration.maxAttemptCount else {
-      logger.trace("Request timeout: \(transactionId)")
-      transaction.timeoutTask.cancel()
-      transaction.handler?(.failure(STUNError.timeout))
-      transactions[transaction.id] = nil
-      return
-    }
-
-    do {
-      logger.trace("Resend request: \(transactionId)")
-      try strat(transaction)
-    } catch {
-      logger.trace("Failed to resend request: \(transactionId)")
-      transaction.timeoutTask.cancel()
-      transaction.handler?(.failure(error))
-      transactions[transaction.id] = nil
+      transactions.removeAll()
+      socket.close()
     }
   }
 }
 
+// MARK: - Internal
+
 extension STUNClient {
 
-  internal func loop() {
-    let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 1024)
-    buffer.initialize(repeating: 0, count: 1024)
-    defer {
-      buffer.deallocate()
-    }
+  internal func async(_ handler: @escaping Handler<Void>) {
+    configuration.eventLoop.execute(handler)
+  }
 
-    while true {
-      do {
-        let count = try socket.recv(UnsafeMutableRawBufferPointer(start: buffer, count: 1024))
-        let message = try STUNMessage(bytes: Array(UnsafeMutableBufferPointer(start: buffer, count: count)))
-        queue.async { [self] in
-          didReceiveMessage(message)
+  internal func send(
+    _ message: STUNMessage,
+    to address: SocketAddress,
+    completion handler: ResultHandler<Void>? = nil
+  ) {
+    message.withUnsafeBytes {
+      socket.send($0, to: address) { result in
+        switch result {
+        case .success:
+          logger.trace("Send \(message)", metadata: ["transactionId": "\(message.transactionId)"])
+        case .failure(let error):
+          logger.error("Send failed: \(error)", metadata: ["transactionId": "\(message.transactionId)"])
         }
-      } catch let error as STUNError {
-        logger.error("Invalid STUN packet: \(error)")
-      } catch {
-        logger.error("Receive failed: \(error)")
-        break
+        handler?(result)
       }
     }
+  }
+
+  internal func didReceiveMessage(_ message: STUNMessage) {
+    logger.trace("Receive \(message)", metadata: ["transactionId": "\(message.transactionId)"])
+    if message.type.class == .indication {
+      configuration.indicationHandler?(message)
+      return
+    }
+
+    guard let transaction = transactions[message.transactionId] else {
+      logger.warning("Transaction not found", metadata: ["transactionId": "\(message.transactionId)"])
+      return
+    }
+
+    transaction.cancel()
+    transaction.onSuccess(message)
+    transactions[message.transactionId] = nil
+  }
+
+  internal func didTimeout(_ transaction: Transaction) {
+    transaction.attemptCount += 1
+    guard transaction.attemptCount <= configuration.maxAttemptCount else {
+      logger.error("Transaction timeout", metadata: ["transactionId": "\(transaction.message.transactionId)"])
+      transaction.cancel()
+      transaction.onError(STUNError.timeout)
+      transactions[transaction.message.transactionId] = nil
+      return
+    }
+
+    transaction.start(on: configuration.eventLoop)
+    send(transaction.message, to: transaction.address) { [self] result in
+      if case .failure(let error) = result {
+        transaction.cancel()
+        transaction.onError(error)
+        transactions[transaction.message.transactionId] = nil
+      }
+    }
+  }
+}
+
+// MARK: - STUNClient + UDPSocketDelegate
+
+extension STUNClient: UDPSocketDelegate {
+
+  public func socket(_ socket: UDPSocket, didReceive data: UnsafeRawBufferPointer, peerAddress address: SocketAddress) {
+    do {
+      didReceiveMessage(try STUNMessage(bytes: Array(data)))
+    } catch {
+      logger.error("Receive invalid STUN packet: \(error)")
+    }
+  }
+
+  public func socket(_ socket: UDPSocket, didCloseWith error: Error?) {
+    logger.trace("Client has been closed")
   }
 }
 
@@ -155,6 +164,8 @@ extension STUNClient {
 
 extension STUNClient {
   public struct Configuration {
+    public var eventLoop: EventLoop
+    public var server: SocketAddress
     // RFC 5389 says SHOULD be 500ms.
     // For years, this was 100ms, but for networks that
     // experience moments of high RTT (such as 2G networks), this doesn't
@@ -165,7 +176,14 @@ extension STUNClient {
     // RFC 5389 says SHOULD retransmit 7 times.
     internal var maxAttemptCount = 7
 
-    public init(rto: Duration = .milliseconds(250), indicationHandler: STUNIndicationHandler? = nil) {
+    public init(
+      eventLoop: EventLoop = .default,
+      server: SocketAddress,
+      rto: Duration = .milliseconds(250),
+      indicationHandler: STUNIndicationHandler? = nil
+    ) {
+      self.eventLoop = eventLoop
+      self.server = server
       self.rto = rto
       self.indicationHandler = indicationHandler
     }

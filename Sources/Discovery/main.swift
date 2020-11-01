@@ -7,13 +7,9 @@
 //
 
 import STUN
+import AsyncIO
 import Core
 import Logging
-#if canImport(Darwin)
-import Darwin.C
-#else
-import Glibc
-#endif
 
 let logger: Logger = {
   var l = Logger(label: "swift-webrtc.NATBehaviorDiscovery")
@@ -23,12 +19,12 @@ let logger: Logger = {
 
 // https://www.voip-info.org/stun/
 func main() throws {
-  let discovery = try NATBehaviorDiscovery(server: "stun:stun.stunprotocol.org:3478")
-  discovery.discoverNATMappingBehavior { result in
+  let discovery = NATBehaviorDiscovery(server: SocketAddress("stun.stunprotocol.org:3478")!)
+  discovery.discover { result in
     switch result {
-    case .success(let behavior):
-      print("Detected NAT mapping behavior: \(behavior) - ", terminator: "")
-      switch behavior {
+    case .success((let mappingBehavior, let filteringBehavior)):
+      print("Detected NAT mapping behavior: \(mappingBehavior) - ", terminator: "")
+      switch mappingBehavior {
       case .endpointIndependent:
         print("Host's NAT uses same public IP address regardless of destination address. STUN is usable.")
       case .addressDependent:
@@ -36,31 +32,27 @@ func main() throws {
       case .addressAndPortDependent:
         print("Host's NAT uses different public IP address for different destination address and port. STUN is not usable.")
       }
-    case .failure(let error):
-      print("Detected NAT mapping behavior failed: \(error)")
-    }
 
-    discovery.discoverNATFilteringBehavior { result in
-      switch result {
-      case .success(let behavior):
-        print("Detected NAT filtering behavior: \(behavior) - ", terminator: "")
-        switch behavior {
-        case .endpointIndependent:
-          print("Host's NAT allows to receive UDP packet from any external address. STUN is usable.")
-        case .addressDependent:
-          print("Host's NAT allows to receive UDP packet from external address that host had previously sent data to. STUN is usable.")
-        case .addressAndPortDependent:
-          print("Host's NAT allows to receive UDP packet from external address and port that host had previously sent data to. STUN is usable.")
-        }
-      case .failure(let error):
-        print("Detected NAT filtering behavior failed: \(error)")
+      print("Detected NAT filtering behavior: \(filteringBehavior) - ", terminator: "")
+      switch filteringBehavior {
+      case .endpointIndependent:
+        print("Host's NAT allows to receive UDP packet from any external address. STUN is usable.")
+      case .addressDependent:
+        print("Host's NAT allows to receive UDP packet from external address that host had previously sent data to. STUN is usable.")
+      case .addressAndPortDependent:
+        print("Host's NAT allows to receive UDP packet from external address and port that host had previously sent data to. STUN is usable.")
       }
+    case .failure(let error):
+      print("Detected failed: \(error)")
     }
   }
-  sleep(180)
+
+  try EventLoop.default.run()
+  try EventLoop.default.close()
 }
 
 do {
+  LoggerConfiguration.default.logLevel = .trace
   try main()
 } catch {
   print(error)

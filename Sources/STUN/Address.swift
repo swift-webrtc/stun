@@ -6,7 +6,7 @@
 //  Copyright © 2020 sunlubo. All rights reserved.
 //
 
-import Network
+import AsyncIO
 import Core
 
 /// [RFC5389#section-15.1](https://tools.ietf.org/html/rfc5389#section-15.1)
@@ -61,6 +61,14 @@ public struct STUNXorAddress {
 
   public init(_ address: STUNAddress) {
     self.address = address
+  }
+}
+
+// MARK: - STUNXorAddress + STUNAttributeValueCodable
+
+extension STUNXorAddress: CustomStringConvertible {
+  public var description: String {
+    address.description
   }
 }
 

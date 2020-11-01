@@ -7,19 +7,23 @@
 //
 
 import STUN
-import Network
+import AsyncIO
 import Core
-import Logging
-import Foundation
 
 // https://www.voip-info.org/stun/
 func main() throws {
-  let config = STUNClient.Configuration { message in
-    print(message)
+  let client = STUNClient(configuration: .init(server: SocketAddress("stun.l.google.com:19302")!) { message in
+    print("Receive indication: \(message)")
+  })
+  do {
+    try client.bind()
+  } catch {
+    print(error)
+    client.close()
+    return
   }
-  let client = try STUNClient.connect(to: "stun:stun.l.google.com:19302", configuration: config)
 
-  var request = STUNMessage(type: .bindingRequest)
+  var request = STUNMessage(type: .init(method: .binding, class: .request))
   request.appendAttribute(type: .software, value: "swift-webrtc")
   request.appendFingerprint()
   client.send(request) { result in
@@ -31,11 +35,15 @@ func main() throws {
     }
   }
 
-  let indication = STUNMessage(type: .bindingIndication)
+  let indication = STUNMessage(type: .init(method: .binding, class: .indication))
   client.send(indication)
 
-  sleep(30)
-  client.close()
+  EventLoop.default.schedule(delay: .seconds(10)) { _ in
+    client.close()
+  }
+
+  try EventLoop.default.run()
+  try EventLoop.default.close()
 }
 
 do {

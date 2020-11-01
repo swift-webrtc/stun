@@ -6,7 +6,7 @@
 //  Copyright © 2020 sunlubo. All rights reserved.
 //
 
-import Network
+import AsyncIO
 import Core
 
 // [RFC5389#section-15](https://tools.ietf.org/html/rfc5389#section-15)
@@ -200,7 +200,7 @@ extension STUNAttribute.Kind: CustomStringConvertible {
     case .otherAddress:
       return "OTHER-ADDRESS"
     default:
-      return "Kind(rawValue: \(rawValue)"
+      return "Type(rawValue: \(rawValue))"
     }
   }
 }

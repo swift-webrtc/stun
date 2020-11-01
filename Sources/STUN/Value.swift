@@ -6,7 +6,7 @@
 //  Copyright © 2020 sunlubo. All rights reserved.
 //
 
-import Network
+import AsyncIO
 import Core
 
 public protocol STUNAttributeValueCodable {

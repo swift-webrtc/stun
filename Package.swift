@@ -8,24 +8,12 @@ let package = Package(
     .library(name: "STUN", targets: ["STUN"])
   ],
   dependencies: [
-    .package(url: "https://github.com/swift-webrtc/webrtc-network.git", .branch("master")),
+    .package(name: "webrtc-asyncio", url: "https://github.com/swift-webrtc/asyncio.git", .branch("main"))
   ],
   targets: [
-    .target(
-      name: "STUN",
-      dependencies: [.product(name: "Network", package: "webrtc-network")]
-    ),
-    .target(
-      name: "Client",
-      dependencies: ["STUN"]
-    ),
-    .target(
-      name: "Discovery",
-      dependencies: ["STUN"]
-    ),
-    .testTarget(
-      name: "STUNTests",
-      dependencies: ["STUN"]
-    ),
+    .target(name: "STUN", dependencies: [.product(name: "AsyncIO", package: "webrtc-asyncio")]),
+    .target(name: "Client", dependencies: ["STUN"]),
+    .target(name: "Discovery", dependencies: ["STUN"]),
+    .testTarget(name: "STUNTests", dependencies: ["STUN"]),
   ]
 )
